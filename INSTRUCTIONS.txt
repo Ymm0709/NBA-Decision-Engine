@@ -1,0 +1,94 @@
+================================================================================
+NBA 本地项目 · 操作说明（给你下指令用）
+================================================================================
+
+一、目录与职责（务必分清）
+--------------------------------------------------------------------------------
+data/current/          仅「当前赛季 2025-26」：球队短板诊断 + 自由球员/角色球员推荐
+  teams.csv
+  players.csv          ← scrape_nba.py 生成；前端 index.html / app.js 只读这里
+
+data/history/          仅「2000-01 赛季～至今」历史序列：ECharts 趋势，不参与补强算法
+  team_seasons.csv              ← scripts/fetch_history_nba_stats.py
+  player_league_style.csv       ← 同上（联盟轮换球员风格近似指标）
+  echarts_history.json          ← scripts/build_echarts_history_json.py（给 history.html）
+
+scripts/               历史拉取与 JSON 聚合（不依赖 BR 爬虫，用 NBA 官方 Stats API）
+web/index.html         当前赛季核心：短板 → 推荐 → 适配分 → 理由
+web/history.html       历史可视化（ECharts）
+
+
+二、环境
+--------------------------------------------------------------------------------
+cd /Users/ymm/Desktop/NBA
+python3 -m pip install -r requirements.txt
+
+
+三、更新「当前赛季」核心数据（补强推荐）
+--------------------------------------------------------------------------------
+python3 scrape_nba.py
+# 若 Basketball-Reference 被拦截，可加：  python3 scrape_nba.py --no-network
+# 输出：data/current/teams.csv、data/current/players.csv
+
+球员（联盟 Per Game 在线爬虫）：
+  python3 scripts/scrape_current_season_players.py
+  # 默认：本赛季全表球员（含低出场，pool=roster）；覆盖 data/current/players.csv。
+  # 遇 Cloudflare：浏览器打开 BR「League Per Game」页另存为 HTML，再：
+  python3 scripts/scrape_current_season_players.py --local-html /path/to/NBA_2026_per_game.html
+  # 其他赛季：  python3 scripts/scrape_current_season_players.py --br-season-year 2025
+  # 只要「补强推荐用」子集（≥12 分钟且 ≥15 场）：加 --recommend-only
+  # 等价底层脚本：python3 scripts/fetch_br_league_players.py [--all-players]
+  # 球队表 teams.csv 仍用：python3 scrape_nba.py
+
+
+四、拉取「历史数据」并生成 ECharts 用 JSON（2000～至今，数据量大）
+--------------------------------------------------------------------------------
+pip install nba_api pandas
+
+# 全量（默认含至 2025-26 赛季）
+python3 scripts/fetch_history_nba_stats.py
+
+# 仅合并「最新一季」球队表（含三分命中率 FG3_PCT、篮板率等），用于历史 Tab 缺当年曲线时：
+python3 scripts/scrape_season_team_stats_br.py
+# 等价：python3 scripts/fetch_history_nba_stats.py --only-season 2025-26
+
+python3 scripts/build_echarts_history_json.py
+# 输出：data/history/echarts_history.json
+
+说明：需本机能访问 stats.nba.com；全量请求间隔默认 0.7s，全量约需数十分钟。
+
+
+五、本地打开网页（file 协议无法读 CSV/JSON）
+--------------------------------------------------------------------------------
+cd /Users/ymm/Desktop/NBA
+
+推荐（Vite，根路径即页面，并挂载 data/）：
+  npm install          # 首次
+  npm run dev
+  http://localhost:5173/
+  http://localhost:5173/?tab=historical
+  http://localhost:5173/?tab=current
+
+或 Python 静态服务（需在 URL 中带 /web/）：
+  python3 -m http.server 8080
+  http://localhost:8080/web/index.html
+  http://localhost:8080/web/index.html?tab=historical   ← Historical Analysis
+  http://localhost:8080/web/index.html?tab=current       ← Current Season Decision（data/current/）
+  默认首页：在 index.html 根标签上设置 data-default-tab="historical" 或 "current"；旧书签 #current 仍会自动识别。
+  历史 JSON：data/history/echarts_history.json
+
+若 history 提示占位：先完成「第四节」生成真实 JSON。
+
+
+六、自由球员名单（可选）
+--------------------------------------------------------------------------------
+编辑 data/fa_candidates.txt（一行一个与 BR 显示名一致的名字），再运行 scrape_nba.py。
+
+
+七、架构原则（回答你的需求）
+--------------------------------------------------------------------------------
+· 大量历史数据 → 只做可视化（历年球队走势、联盟节奏/效率、轮换球员平均三分与助攻等）。
+· 2025-26 当前赛季 → 才启用短板诊断、智能推荐、适配分、逐条理由（读 data/current/）。
+· 两套数据物理隔离，避免误把历史均值写进当季推荐。
+
+================================================================================

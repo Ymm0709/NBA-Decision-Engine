@@ -1,0 +1,22 @@
+# One player name per line (matches Basketball-Reference display names). Used to tag pool=free_agent when scraping cannot hit a live FA list.
+# Edit this list as the offseason moves.
+James Harden
+Paul George
+Kyle Kuzma
+Malik Monk
+Brook Lopez
+Clint Capela
+Jonas Valančiūnas
+Gary Trent Jr.
+Doug McDermott
+Taurean Prince
+Gary Payton II
+Chris Paul
+Gordon Hayward
+Kelly Oubre Jr.
+Caleb Martin
+Andre Drummond
+Montrezl Harrell
+Derrick Jones Jr.
+Torrey Craig
+Nic Batum
