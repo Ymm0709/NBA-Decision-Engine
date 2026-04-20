@@ -46,6 +46,19 @@ function histTextColor() {
   return style.getPropertyValue("--text").trim() || "#ffffff";
 }
 
+function histIsDark() {
+  return (document.documentElement.getAttribute("data-theme") || "").toLowerCase() === "dark";
+}
+
+function histInk(alpha) {
+  const a = Math.max(0, Math.min(1, Number(alpha)));
+  return histIsDark() ? `rgba(247, 243, 236, ${a})` : `rgba(11, 14, 20, ${a})`;
+}
+
+function histMuted(alpha = 0.56) {
+  return histInk(alpha);
+}
+
 const histTooltipAxis2 = {
   trigger: "axis",
   valueFormatter: histFmt2,
@@ -79,7 +92,7 @@ function emptyDimChartOption(msg) {
       text: msg,
       left: "center",
       top: "center",
-      textStyle: { color: "#94a3b8", fontSize: 13, fontWeight: 500 },
+      textStyle: { color: histMuted(0.52), fontSize: 13, fontWeight: 500 },
     },
     grid: { left: 12, right: 12, top: 12, bottom: 12 },
     xAxis: [{ show: false, type: "category", data: [] }],
@@ -91,23 +104,23 @@ function emptyDimChartOption(msg) {
 /** 卡片标题在 HTML 中展示；画布内仅图例+坐标轴，图例在底部避免与标题叠字 */
 function baseDimGrid({ withLegend = false } = {}) {
   return withLegend
-    ? { left: 48, right: 14, top: 6, bottom: 58 }
+    ? { left: 48, right: 14, top: 6, bottom: 76 }
     : { left: 48, right: 14, top: 6, bottom: 48 };
 }
 
 const dimLegendBottom = {
-  bottom: 4,
+  bottom: 8,
   left: "center",
   orient: "horizontal",
   itemGap: 18,
-  textStyle: { fontSize: 11, color: "#64748b" },
+  textStyle: { fontSize: 11, color: histMuted(0.56) },
 };
 
 function fg3MarkLineData(seasons) {
   return SMALL_BALL_MARK_SEASONS.filter((s) => seasons.includes(s)).map((s) => ({
     xAxis: s,
-    label: { show: true, formatter: s, color: "#64748b", fontSize: 10 },
-    lineStyle: { color: "rgba(148,163,184,0.85)", type: "dashed", width: 1.2 },
+    label: { show: true, formatter: s, color: histMuted(0.56), fontSize: 10 },
+    lineStyle: { color: histInk(0.34), type: "dashed", width: 1.2 },
   }));
 }
 
@@ -281,7 +294,8 @@ function leagueMeanRow(teams8d, season) {
   return o;
 }
 
-function renderHist8dEmptyState(histChart, teamLabel) {
+function renderHist8dEmptyState(histChart, text = "请先选择赛季") {
+  if (!histChart) return;
   histChart.setOption(
     {
       ...ecThemeLight(),
@@ -290,7 +304,24 @@ function renderHist8dEmptyState(histChart, teamLabel) {
       tooltip: { show: false },
       radar: undefined,
       series: [],
-      graphic: [],
+      graphic: [
+        {
+          type: "group",
+          left: "center",
+          top: "middle",
+          children: [
+            {
+              type: "text",
+              style: {
+                text,
+                fill: histMuted(0.58),
+                font: "600 14px DM Sans, Segoe UI, sans-serif",
+                textAlign: "center",
+              },
+            },
+          ],
+        },
+      ],
     },
     true
   );
@@ -305,25 +336,33 @@ function setHist8dPickerUIState(seasonSelect, mode) {
 function drawHistStyle8d(histChart, seasonSelect, data, teamKey) {
   const teams8d = data.teams8d || {};
   if (!histChart) return;
+  const picker = document.getElementById("hist-8d-picker");
+  const trigger = document.getElementById("hist-8d-trigger");
+  const menu = document.getElementById("hist-8d-menu");
+
+  const closeSeasonMenu = () => {
+    if (!picker || !trigger || !menu) return;
+    picker.classList.remove("is-open");
+    trigger.setAttribute("aria-expanded", "false");
+    menu.hidden = true;
+  };
+
+  const setSeasonPickerDisabled = (disabled, text = "选择赛季") => {
+    if (!picker || !trigger || !menu) return;
+    picker.classList.toggle("is-disabled", !!disabled);
+    trigger.textContent = text;
+    closeSeasonMenu();
+  };
 
   if (!teamKey) {
     if (seasonSelect) {
       seasonSelect.innerHTML = "";
       seasonSelect.disabled = true;
     }
-    setHist8dPickerUIState(seasonSelect, "none");
-    histChart.setOption({
-      ...ecThemeLight(),
-      title: {
-        text: "请先在上方的分区棋盘选择一支球队",
-        left: "center",
-        top: "middle",
-        textStyle: { color: "#64748b", fontSize: 14 },
-      },
-      legend: { show: false },
-      radar: undefined,
-      series: [],
-    });
+    if (menu) menu.innerHTML = "";
+    setSeasonPickerDisabled(true, "先选球队");
+    setHist8dPickerUIState(seasonSelect, "pending");
+    renderHist8dEmptyState(histChart, "请先选择球队");
     return;
   }
 
@@ -334,37 +373,35 @@ function drawHistStyle8d(histChart, seasonSelect, data, teamKey) {
       seasonSelect.innerHTML = "";
       seasonSelect.disabled = true;
     }
-    setHist8dPickerUIState(seasonSelect, "none");
-    histChart.setOption({
-      ...ecThemeLight(),
-      title: {
-        text: "暂无该队的风格维度数据",
-        left: "center",
-        top: "middle",
-        textStyle: { color: "#64748b", fontSize: 14 },
-      },
-      legend: { show: false },
-      radar: undefined,
-      series: [],
-    });
+    if (menu) menu.innerHTML = "";
+    setSeasonPickerDisabled(true, "暂无赛季");
+    setHist8dPickerUIState(seasonSelect, "pending");
+    renderHist8dEmptyState(histChart, "暂无该队风格维度数据");
     return;
   }
 
   if (seasonSelect) {
     seasonSelect.disabled = false;
-    seasonSelect.innerHTML = [
-      '<option value="" selected>请先选择赛季</option>',
-      ...mine.map((r) => `<option value="${r.season}">${r.season}</option>`),
-    ].join("");
+    seasonSelect.innerHTML = ['<option value="">选择赛季</option>', ...mine.map((r) => `<option value="${r.season}">${r.season}</option>`)].join("");
     seasonSelect.value = "";
-    setHist8dPickerUIState(seasonSelect, "pending");
   }
+  if (menu) {
+    menu.innerHTML = mine
+      .map(
+        (r) =>
+          `<button type="button" class="hist-season-option" data-season="${r.season}" role="option" aria-selected="false">${r.season}</button>`
+      )
+      .join("");
+  }
+  setSeasonPickerDisabled(false, "选择赛季");
+  setHist8dPickerUIState(seasonSelect, "pending");
+  renderHist8dEmptyState(histChart, "请选择赛季后显示雷达图");
 
   function paint() {
-    const season = seasonSelect ? seasonSelect.value : mine[mine.length - 1].season;
+    const season = seasonSelect ? seasonSelect.value : "";
     if (!season) {
       setHist8dPickerUIState(seasonSelect, "pending");
-      renderHist8dEmptyState(histChart, teamLabel);
+      renderHist8dEmptyState(histChart, "请选择赛季后显示雷达图");
       return;
     }
     const row = mine.find((r) => r.season === season);
@@ -377,170 +414,136 @@ function drawHistStyle8d(histChart, seasonSelect, data, teamKey) {
       max: Math.max(maxes[i] || 1, teamVals[i] || 0, leagueVals[i] || 0, 1),
       min: 0,
     }));
+
     setHist8dPickerUIState(seasonSelect, "picked");
-    histChart.setOption({
-      ...ecThemeLight(),
-      animationDurationUpdate: 520,
-      animationEasingUpdate: "cubicOut",
-      title: {
-        text: `${teamLabel} · ${season} · 风格雷达`,
-        left: 0,
-        top: 2,
-        textStyle: { fontSize: 14, fontWeight: 700 },
-      },
-      legend: {
-        data: ["本队", "联盟均值"],
-        top: 6,
-        right: 8,
-        itemWidth: 14,
-        itemHeight: 8,
-        textStyle: { color: histTextColor(), fontSize: 11 },
-      },
-      radar: {
-        indicator: indicators,
-        radius: "64%",
-        center: ["50%", "56%"],
-        splitNumber: 5,
-        axisName: { color: histTextColor(), fontSize: 12, fontWeight: 600 },
-        axisLine: { lineStyle: { color: "rgba(148,163,184,0.55)" } },
-        splitLine: { lineStyle: { color: "rgba(148,163,184,0.45)" } },
-        splitArea: {
-          areaStyle: {
-            color: [
-              "rgba(148,163,184,0.18)",
-              "rgba(148,163,184,0.12)",
-              "rgba(148,163,184,0.08)",
-              "rgba(148,163,184,0.05)",
-              "rgba(148,163,184,0.02)",
-            ],
+    if (trigger) trigger.textContent = season;
+    if (menu) {
+      menu.querySelectorAll(".hist-season-option").forEach((el) => {
+        const active = el.getAttribute("data-season") === season;
+        el.classList.toggle("is-active", active);
+        el.setAttribute("aria-selected", active ? "true" : "false");
+      });
+    }
+    histChart.setOption(
+      {
+        ...ecThemeLight(),
+        title: {
+          text: `${teamLabel} · ${season} · 风格雷达`,
+          left: 0,
+          top: 2,
+          textStyle: { fontSize: 14, fontWeight: 700 },
+        },
+        legend: {
+          data: ["本队", "联盟均值"],
+          right: 16,
+          bottom: 16,
+          itemWidth: 20,
+          itemHeight: 12,
+          itemGap: 18,
+          textStyle: { color: histTextColor(), fontSize: 14, fontWeight: 700 },
+        },
+        radar: {
+          indicator: indicators,
+          radius: "64%",
+          center: ["50%", "56%"],
+          splitNumber: 5,
+          axisName: { color: histTextColor(), fontSize: 12, fontWeight: 600 },
+          axisLine: { lineStyle: { color: histInk(0.22) } },
+          splitLine: { lineStyle: { color: histInk(0.18) } },
+          splitArea: {
+            areaStyle: { color: [histInk(0.10), histInk(0.07), histInk(0.05), histInk(0.03), histInk(0.015)] },
           },
         },
+        tooltip: {
+          trigger: "item",
+          backgroundColor: histIsDark() ? "rgba(17, 19, 24, 0.95)" : "rgba(247, 243, 236, 0.97)",
+          borderColor: histIsDark() ? "rgba(247, 243, 236, 0.16)" : "rgba(11, 14, 20, 0.14)",
+          borderWidth: 1,
+          padding: [12, 14],
+          textStyle: {
+            color: histTextColor(),
+            fontSize: 13,
+            lineHeight: 20,
+          },
+          extraCssText: [
+            "border-radius:14px",
+            "box-shadow:0 12px 28px rgba(0,0,0,0.22)",
+            "backdrop-filter: blur(2px)",
+          ].join(";"),
+          formatter(p) {
+            if (!p || p.value == null) return "";
+            const vals = Array.isArray(p.value) ? p.value : [p.value];
+            const seriesLabel = p.name;
+            const lines = STYLE8D_METRICS.map((m, i) => {
+              const teamRawNum = Number(row && row[m.key]);
+              const leagueRawNum = Number(league && league[m.key]);
+              const teamRaw = histMetricRawText(m.key, row && row[m.key]);
+              const rawLeague = histMetricRawText(m.key, league && league[m.key]);
+              let deltaText = "—";
+              if (Number.isFinite(teamRawNum) && Number.isFinite(leagueRawNum)) {
+                const delta = m.key === "fg3_pct" ? (teamRawNum - leagueRawNum) * 100 : teamRawNum - leagueRawNum;
+                const unit = m.key === "fg3_pct" ? "pp" : "";
+                deltaText = `${delta >= 0 ? "+" : ""}${delta.toFixed(1)}${unit}`;
+              }
+              return `<span style="display:inline-block;min-width:98px;color:${histMuted(0.72)}">${m.name}</span><span style="font-weight:700">雷达 ${histFmt2(
+                vals[i]
+              )}</span><span style="color:${histMuted(0.64)}">  ·  本队 ${teamRaw}  ·  联盟 ${rawLeague}  ·  Δ ${deltaText}</span>`;
+            }).join("<br/>");
+            return `<div style="margin-bottom:6px;font-size:14px;font-weight:800;letter-spacing:.01em">${p.marker}<span>${seriesLabel} · ${teamLabel} · ${season}</span></div>${lines}`;
+          },
+        },
+        series: [
+          {
+            type: "radar",
+            data: [
+              {
+                value: teamVals,
+                name: "本队",
+                areaStyle: { opacity: 0.2, color: histInk(0.30) },
+                lineStyle: { width: 2.6, color: histInk(0.9) },
+                symbol: "circle",
+                symbolSize: 6,
+                itemStyle: { color: histInk(0.9) },
+              },
+              {
+                value: leagueVals,
+                name: "联盟均值",
+                symbol: "none",
+                lineStyle: { type: "dashed", dashOffset: 0, width: 3, color: histInk(0.42) },
+                areaStyle: { opacity: 0 },
+                itemStyle: { color: histInk(0.42) },
+              },
+            ],
+          },
+        ],
       },
-      graphic: [
-        {
-          type: "group",
-          left: 16,
-          bottom: 16,
-          z: 9,
-          children: [
-            {
-              type: "rect",
-              shape: { x: 0, y: 0, width: 260, height: 50, r: 8 },
-              style: {
-                fill: "rgba(15,23,42,0.52)",
-                stroke: "rgba(148,163,184,0.28)",
-                lineWidth: 1,
-              },
-            },
-            {
-              type: "rect",
-              style: {
-                fill: "#3b82f6",
-              },
-              shape: { x: 12, y: 12, width: 34, height: 14, r: 5 },
-            },
-            {
-              type: "text",
-              style: {
-                x: 54,
-                y: 23,
-                text: "本队",
-                fill: histTextColor(),
-                font: "600 12px DM Sans, Segoe UI, sans-serif",
-                textVerticalAlign: "middle",
-              },
-            },
-            {
-              type: "rect",
-              style: {
-                fill: "#10b981",
-              },
-              shape: { x: 112, y: 12, width: 34, height: 14, r: 5 },
-            },
-            {
-              type: "line",
-              shape: { x1: 112, y1: 19, x2: 146, y2: 19 },
-              style: {
-                stroke: "rgba(15,23,42,0.9)",
-                lineWidth: 2,
-                lineDash: [5, 4],
-              },
-            },
-            {
-              type: "text",
-              style: {
-                x: 154,
-                y: 23,
-                text: "联盟均值",
-                fill: histTextColor(),
-                font: "600 12px DM Sans, Segoe UI, sans-serif",
-                textVerticalAlign: "middle",
-              },
-            },
-            {
-              type: "text",
-              style: {
-                x: 12,
-                y: 39,
-                text: "同赛季 7 维风格对比",
-                fill: "rgba(148,163,184,0.95)",
-                font: "500 11px DM Sans, Segoe UI, sans-serif",
-              },
-            },
-          ],
-        },
-      ],
-      tooltip: {
-        trigger: "item",
-        formatter(p) {
-          if (!p || p.value == null) return "";
-          const vals = Array.isArray(p.value) ? p.value : [p.value];
-          const source = p.name === "联盟均值" ? league : row;
-          const lines = STYLE8D_METRICS.map((m, i) => {
-            const rawTeam = histMetricRawText(m.key, row && row[m.key]);
-            const rawLeague = histMetricRawText(m.key, league && league[m.key]);
-            const rawCur = histMetricRawText(m.key, source && source[m.key]);
-            const baseText = `${m.name}：雷达 ${histFmt2(vals[i])} · 当前 ${rawCur}`;
-            if (p.name === "联盟均值") return `${baseText}（联盟基准）`;
-            const teamNum = Number(row && row[m.key]);
-            const leagueNum = Number(league && league[m.key]);
-            if (!Number.isFinite(teamNum) || !Number.isFinite(leagueNum)) return `${baseText} · 联盟 ${rawLeague}`;
-            const diff = m.key === "fg3_pct" ? (teamNum - leagueNum) * 100 : teamNum - leagueNum;
-            const diffText = `${diff >= 0 ? "+" : ""}${diff.toFixed(1)}${m.key === "fg3_pct" ? "pp" : ""}`;
-            return `${baseText} · 联盟 ${rawLeague} · Δ ${diffText}`;
-          }).join("<br/>");
-          return `${p.marker}<b>${p.name} · ${teamLabel} · ${season}</b><br/>${lines}`;
-        },
-      },
-      series: [
-        {
-          type: "radar",
-          name: "风格",
-          data: [
-            {
-              value: teamVals,
-              name: "本队",
-              areaStyle: { opacity: 0.22, color: "rgba(37,99,235,0.35)" },
-              lineStyle: { width: 2.4, color: "#3b82f6" },
-              symbol: "circle",
-              symbolSize: 6,
-              itemStyle: { color: "#3b82f6" },
-            },
-            {
-              value: leagueVals,
-              name: "联盟均值",
-              symbol: "none",
-              lineStyle: { type: "dashed", width: 2, color: "#10b981" },
-              areaStyle: { opacity: 0 },
-            },
-          ],
-        },
-      ],
+      true
+    );
+  }
+
+  if (picker && trigger && menu && !picker.dataset.bound) {
+    picker.dataset.bound = "1";
+    trigger.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      if (picker.classList.contains("is-disabled")) return;
+      const open = !picker.classList.contains("is-open");
+      picker.classList.toggle("is-open", open);
+      trigger.setAttribute("aria-expanded", open ? "true" : "false");
+      menu.hidden = !open;
+    });
+    menu.addEventListener("click", (ev) => {
+      const btn = ev.target.closest(".hist-season-option");
+      if (!btn || !seasonSelect) return;
+      seasonSelect.value = btn.getAttribute("data-season") || "";
+      closeSeasonMenu();
+      paint();
+    });
+    document.addEventListener("click", (ev) => {
+      if (!picker.contains(ev.target)) closeSeasonMenu();
     });
   }
 
   if (seasonSelect) seasonSelect.onchange = paint;
-  paint();
 }
 
 function ecThemeLight() {
@@ -548,7 +551,7 @@ function ecThemeLight() {
   const style = getComputedStyle(root);
   const text = style.getPropertyValue("--text").trim() || "#e5e7eb";
   return {
-    color: ["#2563eb", "#059669", "#d97706", "#7c3aed"],
+    color: [histInk(0.9), histInk(0.72), histInk(0.55), histInk(0.38)],
     textStyle: { color: text },
     backgroundColor: "transparent",
   };
@@ -666,13 +669,13 @@ function drawHistoricalDimCards(dimCharts, leagueObj, teamKey, teams) {
         xAxis: {
           type: "category",
           data: seasons,
-          axisLabel: { rotate: 38, fontSize: 10, margin: 10 },
+          axisLabel: { rotate: 38, fontSize: 10, margin: 14 },
         },
         yAxis: {
           type: "value",
           name: yName,
           scale: true,
-          nameTextStyle: { fontSize: 11, color: "#64748b" },
+          nameTextStyle: { fontSize: 11, color: histMuted(0.56) },
           axisLabel: { formatter: histFmt2Axis, fontSize: 10, color: histTextColor() },
         },
         series: [
@@ -691,7 +694,7 @@ function drawHistoricalDimCards(dimCharts, leagueObj, teamKey, teams) {
             smooth: true,
             showSymbol: false,
             lineStyle: { width: 1.4, type: "dashed" },
-            itemStyle: { color: "#94a3b8" },
+            itemStyle: { color: histInk(0.42) },
           },
         ],
       },
@@ -715,13 +718,13 @@ function drawHistoricalDimCards(dimCharts, leagueObj, teamKey, teams) {
         xAxis: {
           type: "category",
           data: seasons,
-          axisLabel: { rotate: 38, fontSize: 10, margin: 10 },
+          axisLabel: { rotate: 38, fontSize: 10, margin: 14 },
         },
         yAxis: {
           type: "value",
           name: "Pace",
           scale: true,
-          nameTextStyle: { fontSize: 11, color: "#64748b" },
+          nameTextStyle: { fontSize: 11, color: histMuted(0.56) },
           axisLabel: { formatter: histFmt2Axis, fontSize: 10, color: histTextColor() },
         },
         series: [
@@ -740,7 +743,7 @@ function drawHistoricalDimCards(dimCharts, leagueObj, teamKey, teams) {
             smooth: true,
             showSymbol: false,
             lineStyle: { width: 1.4, type: "dashed" },
-            itemStyle: { color: "#94a3b8" },
+            itemStyle: { color: histInk(0.42) },
           },
         ],
       },
@@ -766,13 +769,13 @@ function drawHistoricalDimCards(dimCharts, leagueObj, teamKey, teams) {
         xAxis: {
           type: "category",
           data: seasons,
-          axisLabel: { rotate: 38, fontSize: 10, margin: 10 },
+          axisLabel: { rotate: 38, fontSize: 10, margin: 14 },
         },
         yAxis: {
           type: "value",
           name: "命中率 %",
           scale: true,
-          nameTextStyle: { fontSize: 11, color: "#64748b" },
+          nameTextStyle: { fontSize: 11, color: histMuted(0.56) },
           axisLabel: { formatter: (v) => `${histFmt2Axis(v)}%`, fontSize: 10, color: histTextColor() },
         },
         series: [
@@ -794,7 +797,7 @@ function drawHistoricalDimCards(dimCharts, leagueObj, teamKey, teams) {
             smooth: true,
             showSymbol: false,
             lineStyle: { width: 1.4, type: "dashed" },
-            itemStyle: { color: "#94a3b8" },
+            itemStyle: { color: histInk(0.42) },
           },
         ],
       },
@@ -805,30 +808,41 @@ function drawHistoricalDimCards(dimCharts, leagueObj, teamKey, teams) {
   dualLine(cRebp, "RPG", t.rpg || [], alignLeague(seasons, league, "reb"));
 
   if (cRpg) {
+    const leagueReb = alignLeague(seasons, league, "reb");
     cRpg.setOption(
       {
         ...ecThemeLight(),
         tooltip: histTooltipAxis2,
-        grid: baseDimGrid({ withLegend: false }),
+        legend: { ...dimLegendBottom, data: ["本队 RPG", "联盟场均"] },
+        grid: baseDimGrid({ withLegend: true }),
         dataZoom,
         xAxis: {
           type: "category",
           data: seasons,
-          axisLabel: { rotate: 38, fontSize: 10, margin: 10 },
+          axisLabel: { rotate: 38, fontSize: 10, margin: 14 },
         },
         yAxis: {
           type: "value",
           name: "RPG",
           scale: true,
-          nameTextStyle: { fontSize: 11, color: "#64748b" },
+          nameTextStyle: { fontSize: 11, color: histMuted(0.56) },
           axisLabel: { formatter: histFmt2Axis, fontSize: 10, color: histTextColor() },
         },
         series: [
           {
-            name: "RPG",
+            name: "本队 RPG",
             type: "bar",
             data: t.rpg || [],
-            itemStyle: { color: "#2563eb", borderRadius: [3, 3, 0, 0] },
+            itemStyle: { color: histInk(0.72), borderRadius: [3, 3, 0, 0] },
+          },
+          {
+            name: "联盟场均",
+            type: "line",
+            data: leagueReb,
+            smooth: true,
+            showSymbol: false,
+            lineStyle: { width: 1.6, type: "dashed", color: histInk(0.42) },
+            itemStyle: { color: histInk(0.42) },
           },
         ],
       },
@@ -839,39 +853,61 @@ function drawHistoricalDimCards(dimCharts, leagueObj, teamKey, teams) {
   if (cStk) {
     const stl = (t.stl || []).map((v) => (v == null ? 0 : Number(v)));
     const blk = (t.blk || []).map((v) => (v == null ? 0 : Number(v)));
+    const leagueStl = alignLeague(seasons, league, "stl");
+    const leagueBlk = alignLeague(seasons, league, "blk");
     cStk.setOption(
       {
         ...ecThemeLight(),
-        legend: { ...dimLegendBottom, data: ["抢断 STL", "盖帽 BLK"] },
+        legend: { ...dimLegendBottom, data: ["本队 STL", "本队 BLK", "联盟 STL", "联盟 BLK"] },
         tooltip: histTooltipAxis2,
         grid: baseDimGrid({ withLegend: true }),
         dataZoom,
         xAxis: {
           type: "category",
           data: seasons,
-          axisLabel: { rotate: 38, fontSize: 10, margin: 10 },
+          axisLabel: { rotate: 38, fontSize: 10, margin: 14 },
         },
         yAxis: {
           type: "value",
           name: "场均",
           scale: true,
-          nameTextStyle: { fontSize: 11, color: "#64748b" },
+          nameTextStyle: { fontSize: 11, color: histMuted(0.56) },
           axisLabel: { formatter: histFmt2Axis, fontSize: 10, color: histTextColor() },
         },
         series: [
           {
-            name: "抢断 STL",
+            name: "本队 STL",
             type: "bar",
             stack: "def",
             data: stl,
-            itemStyle: { color: "#059669" },
+            itemStyle: { color: histInk(0.72) },
           },
           {
-            name: "盖帽 BLK",
+            name: "本队 BLK",
             type: "bar",
             stack: "def",
             data: blk,
-            itemStyle: { color: "#7c3aed" },
+            itemStyle: { color: histInk(0.48) },
+          },
+          {
+            name: "联盟 STL",
+            type: "line",
+            data: leagueStl,
+            smooth: true,
+            showSymbol: false,
+            lineStyle: { width: 1.6, type: "dashed", color: histInk(0.42) },
+            itemStyle: { color: histInk(0.42) },
+            z: 5,
+          },
+          {
+            name: "联盟 BLK",
+            type: "line",
+            data: leagueBlk,
+            smooth: true,
+            showSymbol: false,
+            lineStyle: { width: 1.6, type: "dashed", color: histInk(0.28) },
+            itemStyle: { color: histInk(0.28) },
+            z: 5,
           },
         ],
       },

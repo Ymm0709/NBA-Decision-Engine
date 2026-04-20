@@ -50,6 +50,304 @@ function resolveLogoId(abbr) {
   return TEAM_LOGO_IDS[norm] || null;
 }
 
+function avatarFallbackDataUrl(name) {
+  const raw = String(name || "").trim();
+  const safe = raw && raw !== "—" ? raw : "Player";
+  const words = safe
+    .replace(/\s+/g, " ")
+    .split(" ")
+    .filter(Boolean);
+  const initials =
+    words.length >= 2
+      ? (words[0][0] || "").toUpperCase() + (words[words.length - 1][0] || "").toUpperCase()
+      : (safe[0] || "P").toUpperCase();
+
+  // Simple deterministic hash for color
+  let h = 0;
+  for (let i = 0; i < safe.length; i++) h = (h * 31 + safe.charCodeAt(i)) >>> 0;
+  const hue = h % 360;
+  const bg1 = `hsl(${hue} 22% 92%)`;
+  const bg2 = `hsl(${(hue + 18) % 360} 28% 84%)`;
+  const stroke = "rgba(148,163,184,0.78)";
+  const text = "rgba(11,14,20,0.72)";
+
+  const svg = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="${bg1}"/>
+      <stop offset="1" stop-color="${bg2}"/>
+    </linearGradient>
+  </defs>
+  <circle cx="48" cy="48" r="46" fill="url(#g)" stroke="${stroke}" stroke-width="2"/>
+  <circle cx="48" cy="40" r="18" fill="rgba(255,255,255,0.55)"/>
+  <path d="M20 82c6-16 20-22 28-22s22 6 28 22" fill="rgba(255,255,255,0.55)"/>
+  <text x="48" y="52" text-anchor="middle" font-family="DM Sans, Segoe UI, system-ui, sans-serif" font-size="22" font-weight="800" fill="${text}">${initials}</text>
+</svg>`;
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
+
+function grayPersonAvatarDataUrl() {
+  const svg = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f3f4f6"/>
+      <stop offset="1" stop-color="#d1d5db"/>
+    </linearGradient>
+  </defs>
+  <circle cx="48" cy="48" r="46" fill="url(#g)" stroke="rgba(148,163,184,0.78)" stroke-width="2"/>
+  <circle cx="48" cy="36" r="14" fill="rgba(107,114,128,0.72)"/>
+  <path d="M22 76c4-13 14-20 26-20s22 7 26 20" fill="rgba(107,114,128,0.72)"/>
+</svg>`;
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
+
+function draftAvatarFromUrl(url) {
+  const u = String(url || "").trim();
+  if (!u) return "";
+  const low = u.toLowerCase();
+  // 明显非本人头像：logo、泛图、赛事图、占位图等
+  const badHints = [
+    "logo",
+    "fiba",
+    "image-1024x1024",
+    "placeholder",
+    "default",
+    "/ncaa/",
+    "tank_",
+    "arena",
+    "stadium",
+    "court",
+    "building",
+    "interior",
+    "cathedral",
+  ];
+  if (badHints.some((k) => low.includes(k))) return "";
+
+  // 只允许可信的人像来源，避免爬虫抓到“非人物图”
+  let host = "";
+  try {
+    host = new URL(u).hostname.toLowerCase();
+  } catch (_) {
+    return "";
+  }
+  const trustedHosts = [
+    "a.espncdn.com",
+    "img.espncdn.com",
+    "cdn.nba.com",
+    "www.nbadraft.net",
+    "nbadraft.net",
+    "upload.wikimedia.org",
+    "dxbhsrqyrr690.cloudfront.net", // 部分大学官方球员照
+    "assets.fiba.basketball",
+    "s.yimg.com",
+    "images2.minutemediacdn.com",
+  ];
+  const isTrusted = trustedHosts.some((h) => host === h || host.endsWith(`.${h}`));
+  if (!isTrusted) return "";
+
+  return encodeURI(u);
+}
+
+function roleLabelForPlayer(p, avgs) {
+  const pos = String(p.pos || "").toUpperCase();
+  const reb = num(p.reb);
+  const ast = num(p.ast);
+  const fg3 = num(p.fg3_pct);
+  const tov = num(p.tov);
+  const stl = num(p.stl);
+  const blk = num(p.blk);
+  const defEvents = stl + blk;
+
+  const aReb = num(avgs.reb);
+  const aAst = num(avgs.ast);
+  const aFg3 = num(avgs.fg3_pct);
+  const aTov = num(avgs.tov);
+  const aDefEvents = num(avgs.stl) + num(avgs.blk);
+
+  const isBig = pos.includes("C") || pos.includes("PF");
+  const isWing = pos.includes("SF") || pos.includes("PF") || pos.includes("SG");
+  const isGuard = pos.includes("PG") || pos.includes("SG");
+
+  if (isBig && (blk >= 1.2 || defEvents >= aDefEvents + 0.65)) return "Rim Protector";
+  if (isWing && fg3 >= aFg3 + 0.012 && (stl >= 1.0 || defEvents >= aDefEvents + 0.25)) return "3&D Wing";
+  if (isGuard && ast >= aAst + 1.2 && tov <= aTov + 0.2) return "Secondary Playmaker";
+  if (fg3 >= aFg3 + 0.018 && ast <= aAst - 0.6) return "Floor Spacer";
+  if (isBig && fg3 >= aFg3 + 0.012) return "Stretch Big";
+  if (isBig && reb >= aReb + 1.6) return "Rebounding Big";
+  return isWing ? "Two-way Wing" : "Rotation Piece";
+}
+
+function draftTypeMap() {
+  return {
+    shooting: { type: "得分后卫型", why: ["外线与空间需求更高", "需要提升半场投射威胁", "更容易立刻带来进攻增量"] },
+    defense: { type: "防守侧翼型", why: ["防守端需要增量", "侧翼换防与对抗是稀缺资源", "年轻侧翼更适合长期发展"] },
+    playmaking: { type: "组织后卫型", why: ["组织与推进存在缺口", "第二持球点能降低失误波动", "更容易提升整体进攻结构"] },
+    rebounding: { type: "空间型内线", why: ["篮板/内线对抗需要补强", "能兼顾护框与空间（若成型）", "对阵容搭配更灵活"] },
+  };
+}
+
+function pickDraftTypeFromNeeds(needs) {
+  const top = rankNeedKeys(needs)[0] || "defense";
+  const map = draftTypeMap();
+  return map[top] || map.defense;
+}
+
+function listDraftTypes() {
+  const map = draftTypeMap();
+  return ["shooting", "defense", "playmaking", "rebounding"].map((k) => ({
+    key: k,
+    type: map[k].type,
+  }));
+}
+
+function normalizeDraftProspects(poolRaw) {
+  return (Array.isArray(poolRaw) ? poolRaw : [])
+    .map((r, idx) => {
+      const name = String(r.name || "").trim();
+      const pos = String(r.position || "").trim() || "--";
+      const id = String(r.id || name.toLowerCase().replace(/[^a-z0-9]+/g, "-") || `prospect-${idx}`);
+      const draftRank = Number.isFinite(Number(r.rank)) ? Number(r.rank) : idx + 1;
+      return {
+        id,
+        draft_rank: draftRank,
+        player_name: name,
+        pos,
+        avatar_url: String(r.avatar_url || "").trim(),
+        fg3_pct: num(r.fg3_pct),
+        reb: num(r.reb),
+        ast: num(r.ast),
+        stl: num(r.stl),
+        blk: num(r.blk),
+        tov: num(r.tov),
+        archetype: String(r.archetype || "").trim() || "Prospect",
+        potential: num(r.potential, 1),
+        risk: String(r.risk || "").trim() || "Medium Risk",
+        notes: String(r.notes || "").trim(),
+        mpg: 24,
+      };
+    })
+    .filter((p) => p.player_name);
+}
+
+function computeDraftImpact(team, avgs, prospect) {
+  const before = {
+    fg3_pct: num(team.fg3_pct),
+    ortg: num(team.ortg),
+    drtg: num(team.drtg),
+    reb: num(team.reb),
+    ast: num(team.ast),
+    tov: num(team.tov),
+    def_events: num(team.stl) + num(team.blk),
+  };
+
+  const pot = num(prospect.potential, 1);
+  const potBoost = (pot - 1) * 2.4;
+  const shootDeltaRaw = num(prospect.fg3_pct) - num(avgs.fg3_pct);
+  const rebDeltaRaw = num(prospect.reb) - num(avgs.reb);
+  const astDeltaRaw = num(prospect.ast) - num(avgs.ast);
+  const defDeltaRaw = num(prospect.stl) + num(prospect.blk) - (num(avgs.stl) + num(avgs.blk));
+  const tovDeltaRaw = num(prospect.tov) - num(avgs.tov);
+
+  const after = {
+    fg3_pct: clamp(before.fg3_pct + shootDeltaRaw * 0.18 + potBoost * 0.0009, 0.24, 0.45),
+    reb: clamp(before.reb + rebDeltaRaw * 0.24 + potBoost * 0.08, 36, 52),
+    ast: clamp(before.ast + astDeltaRaw * 0.22 + potBoost * 0.05, 18, 34),
+    tov: clamp(before.tov + tovDeltaRaw * 0.17 - potBoost * 0.03, 9.5, 17.5),
+    def_events: clamp(before.def_events + defDeltaRaw * 0.25 + potBoost * 0.04, 8.5, 21),
+    ortg: 0,
+    drtg: 0,
+  };
+
+  after.drtg = clamp(before.drtg - (after.def_events - before.def_events) * 0.88 - (after.reb - before.reb) * 0.1, 103, 123);
+  after.ortg = clamp(
+    before.ortg +
+      (after.fg3_pct - before.fg3_pct) * 128 +
+      (after.ast - before.ast) * 0.35 -
+      (after.tov - before.tov) * 0.62 +
+      potBoost * 0.3,
+    103,
+    126
+  );
+
+  const delta = {
+    fg3_pp: (after.fg3_pct - before.fg3_pct) * 100,
+    ortg: after.ortg - before.ortg,
+    drtg: after.drtg - before.drtg,
+    reb: after.reb - before.reb,
+    ast: after.ast - before.ast,
+    tov: after.tov - before.tov,
+  };
+  return { before, after, delta };
+}
+
+function buildDraftImpactExplanation(impact) {
+  const items = [
+    { id: "shoot", label: "外线投射", value: impact.delta.fg3_pp, fmt: (v) => `${v >= 0 ? "+" : ""}${fmt2(v)}pp`, goodIfPositive: true },
+    { id: "play", label: "组织串联", value: impact.delta.ast, fmt: (v) => `${v >= 0 ? "+" : ""}${fmt2(v)}`, goodIfPositive: true },
+    { id: "glass", label: "篮板控制", value: impact.delta.reb, fmt: (v) => `${v >= 0 ? "+" : ""}${fmt2(v)}`, goodIfPositive: true },
+    { id: "def", label: "防守效率", value: -impact.delta.drtg, fmt: (v) => `${v >= 0 ? "+" : ""}${fmt2(v)}`, goodIfPositive: true },
+    { id: "care", label: "失误控制", value: -impact.delta.tov, fmt: (v) => `${v >= 0 ? "+" : ""}${fmt2(v)}`, goodIfPositive: true },
+  ];
+  const sorted = [...items].sort((a, b) => Math.abs(b.value) - Math.abs(a.value));
+  const top = sorted[0];
+  const second = sorted[1];
+  const downside = sorted.find((x) => x.value < -0.02);
+  const out = [];
+  if (top && Math.abs(top.value) >= 0.02) out.push(`主要提升：${top.label}（${top.fmt(top.value)}）`);
+  if (second && Math.abs(second.value) >= 0.02) out.push(`次级变化：${second.label}（${second.fmt(second.value)}）`);
+  if (downside) out.push(`潜在代价：${downside.label}可能下滑（${downside.fmt(downside.value)}）`);
+  if (!out.length) out.push("整体影响偏温和，适合作为长期培养型补强。");
+  return out.slice(0, 3);
+}
+
+function clampSelectToMax(selectEl, max) {
+  if (!selectEl) return;
+  const selected = Array.from(selectEl.selectedOptions || []);
+  if (selected.length <= max) return;
+  // 保留最新选择：让超出的从前往后取消
+  for (let i = 0; i < selected.length - max; i++) {
+    selected[i].selected = false;
+  }
+}
+
+function buildImpactLines(outAgg, inAgg) {
+  const lines = [];
+  const d = (k) => num(inAgg[k]) - num(outAgg[k]);
+  const push = (label, delta, fmt, posBetter = true) => {
+    const v = delta;
+    if (Math.abs(v) < 0.01) return;
+    const good = posBetter ? v > 0 : v < 0;
+    lines.push(`${good ? "🟢" : "🟠"} ${label}${fmt(v)}`);
+  };
+  push("得分", d("pts"), (v) => ` ${v >= 0 ? "+" : ""}${fmt2(v)}`);
+  push("篮板", d("reb"), (v) => ` ${v >= 0 ? "+" : ""}${fmt2(v)}`);
+  push("助攻", d("ast"), (v) => ` ${v >= 0 ? "+" : ""}${fmt2(v)}`);
+  push("防守破坏(断+帽)", d("def_events"), (v) => ` ${v >= 0 ? "+" : ""}${fmt2(v)}`);
+  push("三分命中率", d("fg3_pct") * 100, (v) => ` ${v >= 0 ? "+" : ""}${fmt2(v)}pp`);
+  push("失误", d("tov"), (v) => ` ${v >= 0 ? "+" : ""}${fmt2(v)}`, false);
+  if (!lines.length) lines.push("🟡 影响较小：整体变化不明显（或样本分钟数较小）");
+  return lines.slice(0, 4);
+}
+
+
+function aggPlayers(players, avgs) {
+  const list = (players || []).filter((p) => p && p.player_name && p.player_name !== "—");
+  const wSum = list.reduce((a, p) => a + Math.max(1, num(p.mpg, 0)), 0) || 1;
+  const wAvg = (k) => list.reduce((a, p) => a + Math.max(1, num(p.mpg, 0)) * num(p[k], 0), 0) / wSum;
+  const fg3 = list.reduce((a, p) => a + Math.max(1, num(p.mpg, 0)) * num(p.fg3_pct, 0), 0) / wSum;
+  return {
+    pts: wAvg("pts"),
+    reb: wAvg("reb"),
+    ast: wAvg("ast"),
+    tov: wAvg("tov"),
+    fg3_pct: fg3,
+    def_events: list.reduce((a, p) => a + Math.max(1, num(p.mpg, 0)) * (num(p.stl, 0) + num(p.blk, 0)), 0) / wSum,
+    role: list.length ? roleLabelForPlayer(list[0], avgs) : "Rotation Piece",
+  };
+}
+
 function parseCSV(text) {
   const lines = text.trim().split(/\r?\n/);
   const headers = lines[0].split(",").map((h) => h.trim());
@@ -222,6 +520,131 @@ function computeTeamNeeds(team, avgs) {
     playmaking: clamp01(astGap / 4.0),
     turnover_penalty: clamp01(tovGap / 3.0),
   };
+}
+
+function buildTeamVector(team, avgs) {
+  const needs = computeTeamNeeds(team, avgs);
+  return {
+    shooting: needs.shooting,
+    rebounding: needs.rebounding,
+    defense: needs.defense,
+    playmaking: needs.playmaking,
+  };
+}
+
+function weightedTeamAge(players, teamAbbr) {
+  const roster = (players || []).filter(
+    (p) => String(p.team_abbr || "").toUpperCase() === String(teamAbbr || "").toUpperCase() && Number.isFinite(num(p.age))
+  );
+  if (!roster.length) return 27;
+  const wSum = roster.reduce((a, p) => a + Math.max(1, num(p.mpg, 0)), 0) || 1;
+  return roster.reduce((a, p) => a + Math.max(1, num(p.mpg, 0)) * num(p.age, 27), 0) / wSum;
+}
+
+function resolveTeamPhase(team, standings, players) {
+  const row = (standings || []).find((s) => String(s.team_abbr || "").toUpperCase() === String(team.team_abbr || "").toUpperCase());
+  const winPct = num(row && row.win_pct, NaN);
+  const age = weightedTeamAge(players, team.team_abbr);
+  const nrtg = num(team.nrtg);
+
+  if ((Number.isFinite(winPct) && winPct >= 0.6) || nrtg >= 4.0 || age >= 28.2) {
+    return {
+      key: "contend",
+      label: "争冠窗口",
+      styleBias: { playmaking: 0.16, defense: 0.1, shooting: 0.08, rebounding: 0.06, turnoverTolerance: -0.06, experience: 0.14 },
+    };
+  }
+  if ((Number.isFinite(winPct) && winPct <= 0.38) || nrtg <= -3.2) {
+    return {
+      key: "rebuild",
+      label: "重建期",
+      styleBias: { playmaking: 0.06, defense: 0.14, shooting: 0.1, rebounding: 0.08, turnoverTolerance: 0.08, experience: -0.1 },
+    };
+  }
+  return {
+    key: "youth",
+    label: "年轻化发展",
+    styleBias: { playmaking: 0.1, defense: 0.12, shooting: 0.12, rebounding: 0.06, turnoverTolerance: 0.04, experience: -0.04 },
+  };
+}
+
+function buildPlayerVector(p, avgs) {
+  // 球员能力向量：与联盟均值相比的“正向能力”强度（0-1）
+  const shooting = clamp01((num(p.fg3_pct) - num(avgs.fg3_pct)) / 0.03 + 0.45);
+  const rebounding = clamp01((num(p.reb) - num(avgs.reb)) / 4.0 + 0.45);
+  const defense = clamp01(
+    ((num(p.stl) + num(p.blk) - (num(avgs.stl) + num(avgs.blk))) / 2.8) * 0.65 +
+      ((num(p.reb) - num(avgs.reb)) / 5.5) * 0.2 +
+      0.45
+  );
+  const playmaking = clamp01((num(p.ast) - num(avgs.ast)) / 4.0 + 0.45);
+  const ballSecurity = clamp01(((num(avgs.tov) - num(p.tov)) / 3.0) * 0.8 + 0.5);
+  return { shooting, rebounding, defense, playmaking, ballSecurity };
+}
+
+function scorePlayerFitByVectors(p, team, avgs, phase) {
+  const teamVec = buildTeamVector(team, avgs);
+  const playerVec = buildPlayerVector(p, avgs);
+  const turnoverNeed = clamp01(computeTeamNeeds(team, avgs).turnover_penalty);
+  const phaseBias = (phase && phase.styleBias) || {};
+  const age = num(p.age, 27);
+  const mpg = num(p.mpg, 0);
+  const experienceScore = clamp01((age - 23) / 10) * 0.6 + clamp01((mpg - 12) / 24) * 0.4;
+  const youthScore = 1 - clamp01((age - 21) / 9);
+
+  const contributions = {
+    shooting: (teamVec.shooting + (phaseBias.shooting || 0)) * playerVec.shooting,
+    rebounding: (teamVec.rebounding + (phaseBias.rebounding || 0)) * playerVec.rebounding,
+    defense: (teamVec.defense + (phaseBias.defense || 0)) * playerVec.defense,
+    playmaking: (teamVec.playmaking + (phaseBias.playmaking || 0)) * playerVec.playmaking,
+    ballSecurity: clamp01(turnoverNeed - (phaseBias.turnoverTolerance || 0)) * playerVec.ballSecurity,
+    phaseFit: (phaseBias.experience || 0) >= 0 ? experienceScore * phaseBias.experience : youthScore * Math.abs(phaseBias.experience || 0),
+  };
+
+  const baseScore =
+    contributions.shooting +
+    contributions.rebounding +
+    contributions.defense +
+    contributions.playmaking +
+    contributions.ballSecurity * 0.65 +
+    contributions.phaseFit;
+
+  let score = baseScore * 100;
+  const reasons = [];
+
+  if (p.pool === "free_agent") {
+    score += 1.8;
+    reasons.push("自由球员池：现实可操作性更高。");
+  } else if (p.pool === "role") {
+    score += 1.0;
+    reasons.push("角色球员定位：适合做功能补强。");
+  }
+
+  if (p.team_abbr && p.team_abbr === team.team_abbr) {
+    score -= 8;
+    reasons.push("已在本队：分数已降权，仅供对位参考。");
+  }
+
+  score = clamp(score, 0, 100);
+
+  const topDims = [
+    { key: "shooting", label: "投射匹配", val: contributions.shooting, pv: playerVec.shooting, tv: teamVec.shooting },
+    { key: "rebounding", label: "篮板匹配", val: contributions.rebounding, pv: playerVec.rebounding, tv: teamVec.rebounding },
+    { key: "defense", label: "防守匹配", val: contributions.defense, pv: playerVec.defense, tv: teamVec.defense },
+    { key: "playmaking", label: "组织匹配", val: contributions.playmaking, pv: playerVec.playmaking, tv: teamVec.playmaking },
+    { key: "ballSecurity", label: "控失误匹配", val: contributions.ballSecurity * 0.65, pv: playerVec.ballSecurity, tv: turnoverNeed },
+    { key: "phaseFit", label: "阶段因子匹配", val: contributions.phaseFit, pv: (phaseBias.experience || 0) >= 0 ? experienceScore : youthScore, tv: Math.abs(phaseBias.experience || 0) },
+  ]
+    .sort((a, b) => b.val - a.val)
+    .slice(0, 3);
+
+  reasons.push(
+    `向量匹配贡献：${topDims
+      .map((d) => `${d.label}(${fmt2(d.tv)}×${fmt2(d.pv)}=${fmt2(d.val)})`)
+      .join("；")}`
+  );
+
+  return { score, reasons, teamVec, playerVec, contributions };
 }
 
 function buildNeedWeightsFromNeeds(needs) {
@@ -481,14 +904,12 @@ function buildRoleTags(p, avgs) {
   return tags.slice(0, 4);
 }
 
-function recommend(team, players, weaknesses, avgs) {
+function recommend(team, players, weaknesses, avgs, phase) {
   const candidates = players.filter((p) => p.pool === "free_agent" || p.pool === "role");
-  const ranges = buildPlayerRanges(candidates);
   const needs = computeTeamNeeds(team, avgs);
-  const weights = buildNeedWeightsFromNeeds(needs);
   const scored = candidates
     .map((p) => {
-      const { score, reasons } = scorePlayer(p, team, weights, ranges);
+      const { score, reasons } = scorePlayerFitByVectors(p, team, avgs, phase);
       const summary = buildPlayerSummary(p, needs, avgs);
       const roleTags = buildRoleTags(p, avgs);
       return { p, score, reasons, summary, roleTags };
@@ -497,6 +918,11 @@ function recommend(team, players, weaknesses, avgs) {
     .slice(0, 12);
 
   return scored;
+}
+
+function topNeedBars(needs, topN = 2) {
+  const ranked = rankNeedKeys(needs).slice(0, topN);
+  return ranked.map((k) => ({ key: k, label: needLabel(k), value: clamp01(needs[k] || 0) }));
 }
 
 async function loadData() {
@@ -508,7 +934,7 @@ async function loadData() {
     if (!plain.ok) throw new Error("无法加载 data/current/players.csv");
     return plain.text();
   };
-  const [tText, pText, sText] = await Promise.all([
+  const [tText, pText, sText, dText] = await Promise.all([
     fetch(new URL("teams.csv", base)).then((r) => {
       if (!r.ok) throw new Error("无法加载 data/current/teams.csv");
       return r.text();
@@ -517,11 +943,15 @@ async function loadData() {
     fetch(new URL("standings.csv", base))
       .then((r) => (r.ok ? r.text() : ""))
       .catch(() => ""),
+    fetch(new URL("draft_pool.csv", base))
+      .then((r) => (r.ok ? r.text() : ""))
+      .catch(() => ""),
   ]);
   return {
     teams: parseCSV(tText),
     players: dedupePlayersCurrentStint(parseCSV(pText)),
     standings: sText ? parseCSV(sText) : [],
+    draftPool: dText ? parseCSV(dText) : [],
   };
 }
 
@@ -764,8 +1194,9 @@ function renderCurrentDetailCharts(team, avgs) {
       ...CURRENT_TOOLTIP_BASE,
       valueFormatter: (v) => fmt2(v),
     },
-    legend: { data: ["本队", "联盟均值"], bottom: 0, textStyle: { fontSize: 12, color: MUTED } },
-    grid: { left: 46, right: 14, top: 34, bottom: 34 },
+    // 图例放底部会与 x 轴标签挤压，改为顶部以避免遮挡
+    legend: { data: ["本队", "联盟均值"], top: 26, right: 8, textStyle: { fontSize: 12, color: MUTED } },
+    grid: { left: 46, right: 14, top: 56, bottom: 26 },
     xAxis: {
       type: "category",
       data: ["ORtg", "DRtg", "百回合净胜", "Pace"],
@@ -807,8 +1238,9 @@ function renderCurrentDetailCharts(team, avgs) {
       },
       valueFormatter: (v) => fmt2(v),
     },
-    legend: { data: ["本队", "联盟均值"], bottom: 0, textStyle: { fontSize: 12, color: MUTED } },
-    grid: { left: 44, right: 12, top: 34, bottom: 34 },
+    // 图例放底部会与类目轴标签重叠（尤其移动端），改为顶部
+    legend: { data: ["本队", "联盟均值"], top: 26, right: 8, textStyle: { fontSize: 12, color: MUTED } },
+    grid: { left: 44, right: 12, top: 56, bottom: 26 },
     xAxis: {
       type: "category",
       data: ["三分命中率(%)", "篮板", "失误", "抢断+盖帽"],
@@ -959,7 +1391,7 @@ function renderRadar(team, avgs) {
       center: ["58%", "46%"],
       splitNumber: 5,
       splitArea: { areaStyle: { color: ["rgba(37,99,235,0.05)", "rgba(255,255,255,0.4)"] } },
-      axisName: { color: "#64748b", fontSize: 13 },
+      axisName: { color: "#64748b", fontSize: 13, lineHeight: 19, letterSpacing: 1.2 },
     },
     graphic: teamLogoUrl
       ? [
@@ -1057,8 +1489,10 @@ function renderWeaknesses(block, tagsEl, data) {
   }
 }
 
-function renderRecs(listEl, items) {
+function renderRecs(listEl, items, ctx = {}) {
   listEl.innerHTML = "";
+  const phaseLabel = ctx.phaseLabel || "";
+  const needBars = Array.isArray(ctx.needBars) ? ctx.needBars : [];
   for (const { p, score, reasons, summary, roleTags } of items) {
     const li = document.createElement("li");
     li.className = "rec";
@@ -1069,10 +1503,24 @@ function renderRecs(listEl, items) {
           p.player_id
         )}.jpg`
       : "";
+    const fallback = avatarFallbackDataUrl(p.player_name);
+    const roleLabel = roleLabelForPlayer(p, window.__CURRENT_AVGS || {});
+    const barsHtml = needBars
+      .map(
+        (b) => `<div class="needbar-item">
+          <span class="needbar-item__label">${b.label}</span>
+          <span class="needbar-item__value">${Math.round(b.value * 100)}</span>
+          <div class="needbar-item__track"><div class="needbar-item__fill" style="width:${(b.value * 100).toFixed(0)}%"></div></div>
+        </div>`
+      )
+      .join("");
     li.innerHTML = `
       <header>
         <div class="rec-title">
-          <img class="rec-headshot" src="${headshot}" alt="${p.player_name} headshot" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display='none'" />
+          <img class="rec-headshot" src="${headshot || fallback}" alt="${p.player_name} headshot" loading="lazy" referrerpolicy="no-referrer" onerror="this.src='${fallback.replace(
+            /'/g,
+            "%27"
+          )}';this.classList.add('is-empty')" />
           <h3>${p.player_name}</h3>
         </div>
         <div class="rec-score">
@@ -1084,7 +1532,12 @@ function renderRecs(listEl, items) {
           </div>
         </div>
       </header>
-      <div class="meta">${p.pos} · ${p.team_abbr || "—"} · ${poolZh} · ${fmt2(p.mpg)} MPG</div>
+      <div class="rec-team-profile"><span class="rec-team-profile__phase">球队画像：${phaseLabel || "当前阵容阶段"}</span></div>
+      <div class="rec-needbars">
+        <div class="rec-section-title">本队 Top2 需求维度</div>
+        <div class="needbar-list">${barsHtml}</div>
+      </div>
+      <div class="meta">${p.pos} · ${p.team_abbr || "—"} · ${poolZh} · ${fmt2(p.mpg)} MPG · <span class="role-label">角色定位</span> <span class="role-badge">${roleLabel}</span></div>
       <div class="role-tags">
         ${(roleTags || []).map((x) => `<span class="role-tag">${x}</span>`).join("")}
       </div>
@@ -1145,15 +1598,22 @@ function renderCurrentRoster(container, teamAbbr, players) {
       const headshot = p.player_id
         ? `https://www.basketball-reference.com/req/202106291/images/headshots/${encodeURIComponent(p.player_id)}.jpg`
         : "";
+      const fallback = avatarFallbackDataUrl(name);
       return `<div class="current-roster-item">
-        <img class="current-roster-item__avatar" src="${headshot}" alt="${name} avatar" loading="lazy" referrerpolicy="no-referrer" onerror="this.src='';this.classList.add('is-empty')" />
+        <img class="current-roster-item__avatar" src="${headshot || fallback}" alt="${name} avatar" loading="lazy" referrerpolicy="no-referrer" onerror="this.src='${fallback.replace(
+          /'/g,
+          "%27"
+        )}';this.classList.add('is-empty')" />
         <div class="current-roster-item__meta">
           <div class="current-roster-item__name">${name}</div>
           <div class="current-roster-item__sub">#${jersey} · ${pos}</div>
         </div>
         <div class="current-roster-item__hover">
           <div class="current-roster-item__hover-head">
-            <img class="current-roster-item__hover-avatar" src="${headshot}" alt="${name} avatar" loading="lazy" referrerpolicy="no-referrer" onerror="this.src='';this.classList.add('is-empty')" />
+            <img class="current-roster-item__hover-avatar" src="${headshot || fallback}" alt="${name} avatar" loading="lazy" referrerpolicy="no-referrer" onerror="this.src='${fallback.replace(
+              /'/g,
+              "%27"
+            )}';this.classList.add('is-empty')" />
             <div class="current-roster-item__hover-title">
               <div class="current-roster-item__hover-name">${name}</div>
               <div class="current-roster-item__hover-sub">#${jersey} · ${pos} · 年龄 ${age} · 出场 ${gp}</div>
@@ -1176,6 +1636,9 @@ async function main() {
   const tagsEl = document.getElementById("weakness-tags");
   const recList = document.getElementById("recs");
   const rosterEl = document.getElementById("current-roster");
+  const draftPanel = document.getElementById("current-draft-panel");
+  const draftResults = document.getElementById("draft-results");
+  const workspaceNav = document.getElementById("current-workspace-nav");
   const currentContent = document.getElementById("current-content");
   const currentRecsPanel = document.getElementById("current-recs-panel");
   const emptyHint = document.getElementById("current-empty-hint");
@@ -1185,10 +1648,10 @@ async function main() {
   const pickedTeam = document.getElementById("current-picked-team");
   const pickerToggle = document.getElementById("current-team-picker-toggle");
 
-  let teams, players, standings;
+  let teams, players, standings, draftPool;
 
   try {
-    ({ teams, players, standings } = await loadData());
+    ({ teams, players, standings, draftPool } = await loadData());
   } catch (e) {
     err.textContent =
       "加载 CSV 失败。请在本目录运行：python3 -m http.server 8080，然后打开 http://localhost:8080/web/ 。直接双击打开 HTML 时浏览器会阻止 file:// 读取数据。";
@@ -1196,19 +1659,48 @@ async function main() {
     return;
   }
 
+  // 供“交易模拟”面板复用（避免重复加载 CSV）
+  window.__CURRENT_TEAMS = teams;
+  window.__CURRENT_PLAYERS = players;
+  window.__CURRENT_STANDINGS = standings;
+  window.__CURRENT_DRAFT_POOL = Array.isArray(draftPool) ? draftPool : [];
+
   const avgs = {};
   for (const k of LEAGUE_KEYS) {
     avgs[k] = leagueAvg(teams, k);
   }
   avgs.nrtg = leagueAvg(teams, "nrtg");
   avgs.pace = leagueAvg(teams, "pace");
+  // 让推荐卡可用 avgs（避免函数签名大改）
+  window.__CURRENT_AVGS = avgs;
 
   let selectedAbbr = "";
   let pickerCollapsed = false;
+  let activeModule = "free";
+  let recVisibleCount = 5;
+  const draftState = { selectedId: "", compareIds: [], filter: "all" };
+
+  function setActiveModule(name) {
+    activeModule = name || "free";
+    const buttons = workspaceNav ? Array.from(workspaceNav.querySelectorAll(".current-workspace-nav__btn")) : [];
+    const panels = Array.from(document.querySelectorAll(".current-module-panel"));
+    buttons.forEach((btn) => {
+      const on = btn.dataset.module === activeModule;
+      btn.classList.toggle("is-active", on);
+      btn.setAttribute("aria-selected", on ? "true" : "false");
+    });
+    panels.forEach((panel) => {
+      const on = panel.dataset.modulePanel === activeModule;
+      panel.classList.toggle("is-active", on);
+      panel.setAttribute("aria-hidden", on ? "false" : "true");
+    });
+  }
 
   function setEmptyState(on) {
     if (currentContent) currentContent.classList.toggle("is-hidden", on);
+    if (workspaceNav) workspaceNav.classList.toggle("is-hidden", on);
     if (currentRecsPanel) currentRecsPanel.classList.toggle("is-hidden", on);
+    if (draftPanel) draftPanel.classList.toggle("is-hidden", on);
     if (emptyHint) emptyHint.style.display = on ? "" : "none";
   }
 
@@ -1224,9 +1716,72 @@ async function main() {
   // 初始：和历史 Tab 一样，未选队不展示任何内容
   setEmptyState(true);
   setPickerCollapsed(false);
+  setActiveModule("free");
+
+  if (workspaceNav) {
+    workspaceNav.addEventListener("click", (ev) => {
+      const btn = ev.target && ev.target.closest ? ev.target.closest(".current-workspace-nav__btn") : null;
+      if (!btn) return;
+      const next = btn.dataset.module || "free";
+      setActiveModule(next);
+    });
+  }
+
+  if (draftResults) {
+    draftResults.addEventListener("change", (ev) => {
+      const sel = ev.target && ev.target.closest ? ev.target.closest("#draft-archetype-filter") : null;
+      if (!sel) return;
+      draftState.filter = sel.value || "all";
+      update();
+    });
+    draftResults.addEventListener("click", (ev) => {
+      const compareBtn = ev.target && ev.target.closest ? ev.target.closest(".draft-compare-btn") : null;
+      if (compareBtn) {
+        const id = compareBtn.dataset.id;
+        if (!id) return;
+        const has = draftState.compareIds.includes(id);
+        if (has) draftState.compareIds = draftState.compareIds.filter((x) => x !== id);
+        else if (draftState.compareIds.length < 2) draftState.compareIds.push(id);
+        else draftState.compareIds = [draftState.compareIds[1], id];
+        update();
+        return;
+      }
+      const card = ev.target && ev.target.closest ? ev.target.closest(".draft-pool-card") : null;
+      if (!card) return;
+      const id = card.dataset.id;
+      if (!id) return;
+      draftState.selectedId = id;
+      update();
+    });
+  }
+
+  function renderRecLoadMore(totalCount) {
+    const panel = document.getElementById("current-recs-panel");
+    if (!panel) return;
+    let wrap = document.getElementById("recs-loadmore-wrap");
+    if (!wrap) {
+      wrap = document.createElement("div");
+      wrap.id = "recs-loadmore-wrap";
+      wrap.className = "recs-loadmore-wrap";
+      panel.appendChild(wrap);
+    }
+    if (totalCount <= recVisibleCount) {
+      wrap.innerHTML = "";
+      return;
+    }
+    wrap.innerHTML = `<button type="button" class="draft-compare-btn is-on" id="recs-loadmore-btn">Load more</button>`;
+    const btn = document.getElementById("recs-loadmore-btn");
+    if (btn) {
+      btn.addEventListener("click", () => {
+        recVisibleCount += 5;
+        update();
+      });
+    }
+  }
 
   renderTeamOptions(teams, standings, (abbr) => {
     selectedAbbr = abbr;
+    recVisibleCount = 5;
     // 选择球队后自动收起（与历史板块体验一致）
     setPickerCollapsed(true);
     update();
@@ -1244,6 +1799,8 @@ async function main() {
       if (currentPanel) currentPanel.classList.remove("is-team-selected");
       if (pickedTeam) pickedTeam.textContent = "";
       if (rosterEl) rosterEl.innerHTML = "";
+      if (draftResults) draftResults.innerHTML = "";
+      renderRecLoadMore(0);
       setPickerCollapsed(false);
       return;
     }
@@ -1253,10 +1810,13 @@ async function main() {
       if (currentPanel) currentPanel.classList.remove("is-team-selected");
       if (pickedTeam) pickedTeam.textContent = "";
       if (rosterEl) rosterEl.innerHTML = "";
+      if (draftResults) draftResults.innerHTML = "";
+      renderRecLoadMore(0);
       setPickerCollapsed(false);
       return;
     }
     setEmptyState(false);
+    setActiveModule(activeModule);
     if (currentPanel) currentPanel.classList.add("is-team-selected");
     if (pickedTeam) pickedTeam.textContent = `已选：${team.team_name}`;
     syncCurrentTeamPicker(selectedAbbr);
@@ -1265,8 +1825,175 @@ async function main() {
     renderCurrentDetailCharts(team, avgs);
     renderCurrentRoster(rosterEl, selectedAbbr, players);
     renderWeaknesses(weaknessBlock, tagsEl, data);
-    const recs = recommend(team, players, data.weaknesses, avgs);
-    renderRecs(recList, recs);
+    const phase = resolveTeamPhase(team, standings, players);
+    const needs = computeTeamNeeds(team, avgs);
+    const needBars = topNeedBars(needs, 2);
+    const recs = recommend(team, players, data.weaknesses, avgs, phase);
+    renderRecs(recList, recs.slice(0, recVisibleCount), { phaseLabel: phase.label, needBars });
+    renderRecLoadMore(recs.length);
+
+    // Draft：头像池选择 + 影响模拟 + A/B 对比
+    if (draftResults) {
+      const needs = computeTeamNeeds(team, avgs);
+      const pick = pickDraftTypeFromNeeds(needs);
+      const topNeed = rankNeedKeys(needs)[0];
+      const allTypes = listDraftTypes();
+      const prospects = normalizeDraftProspects(window.__CURRENT_DRAFT_POOL || []);
+      const weights = buildNeedWeightsFromNeeds(needs);
+      const ranges = buildPlayerRanges(prospects);
+      const scoredAll = prospects
+        .map((p) => {
+          const fit = scorePlayer(p, team, weights, ranges).score;
+          const draftScore = clamp(fit * num(p.potential, 1), 0, 120);
+          return { p, fit, draftScore };
+        })
+        .sort((a, b) => b.draftScore - a.draftScore);
+
+      const archetypes = [...new Set(scoredAll.map((x) => x.p.archetype).filter(Boolean))].sort();
+      const visible = scoredAll
+        .filter((x) => draftState.filter === "all" || x.p.archetype === draftState.filter)
+        .sort((a, b) => num(a.p.draft_rank, 999) - num(b.p.draft_rank, 999));
+
+      if (!draftState.selectedId && visible.length) draftState.selectedId = visible[0].p.id;
+      if (draftState.selectedId && !scoredAll.some((x) => x.p.id === draftState.selectedId)) draftState.selectedId = visible[0]?.p.id || "";
+      draftState.compareIds = draftState.compareIds.filter((id) => scoredAll.some((x) => x.p.id === id));
+
+      const selected = scoredAll.find((x) => x.p.id === draftState.selectedId) || visible[0] || null;
+      const selectedImpact = selected ? computeDraftImpact(team, avgs, selected.p) : null;
+      const selectedExplain = selectedImpact ? buildDraftImpactExplanation(selectedImpact) : [];
+      const compare = draftState.compareIds
+        .map((id) => scoredAll.find((x) => x.p.id === id))
+        .filter(Boolean)
+        .slice(0, 2);
+
+      const renderImpactRows = (impact) => {
+        if (!impact) return "";
+        const rows = [
+          { label: "3PT%", before: `${fmt2(impact.before.fg3_pct * 100)}%`, after: `${fmt2(impact.after.fg3_pct * 100)}%`, delta: `${impact.delta.fg3_pp >= 0 ? "+" : ""}${fmt2(impact.delta.fg3_pp)}pp`, good: impact.delta.fg3_pp >= 0 },
+          { label: "ORtg", before: fmt2(impact.before.ortg), after: fmt2(impact.after.ortg), delta: `${impact.delta.ortg >= 0 ? "+" : ""}${fmt2(impact.delta.ortg)}`, good: impact.delta.ortg >= 0 },
+          { label: "DRtg", before: fmt2(impact.before.drtg), after: fmt2(impact.after.drtg), delta: `${impact.delta.drtg >= 0 ? "+" : ""}${fmt2(impact.delta.drtg)}`, good: impact.delta.drtg <= 0 },
+          { label: "REB", before: fmt2(impact.before.reb), after: fmt2(impact.after.reb), delta: `${impact.delta.reb >= 0 ? "+" : ""}${fmt2(impact.delta.reb)}`, good: impact.delta.reb >= 0 },
+          { label: "AST", before: fmt2(impact.before.ast), after: fmt2(impact.after.ast), delta: `${impact.delta.ast >= 0 ? "+" : ""}${fmt2(impact.delta.ast)}`, good: impact.delta.ast >= 0 },
+          { label: "TOV", before: fmt2(impact.before.tov), after: fmt2(impact.after.tov), delta: `${impact.delta.tov >= 0 ? "+" : ""}${fmt2(impact.delta.tov)}`, good: impact.delta.tov <= 0 },
+        ];
+        return rows
+          .map(
+            (r) => `<tr>
+              <td>${r.label}</td>
+              <td>${r.before}</td>
+              <td>${r.after}</td>
+              <td class="${r.good ? "is-up" : "is-down"}">${r.delta}</td>
+            </tr>`
+          )
+          .join("");
+      };
+
+      draftResults.innerHTML = `
+        <div class="draft-card draft-card--sim">
+          <div class="draft-title">最佳适配类型：<span class="draft-type">${pick.type}</span></div>
+          <div class="draft-type-list" aria-label="选秀类型列表">
+            ${allTypes
+              .map(
+                (item) =>
+                  `<span class="draft-type-pill ${item.key === topNeed ? "is-active" : ""}">${item.type}</span>`
+              )
+              .join("")}
+          </div>
+          <div class="draft-need-strip">
+            <span class="draft-need-label">短板优先级</span>
+            <span class="draft-need-value">${needLabel(topNeed)}</span>
+          </div>
+          <div class="draft-need-chips">
+            ${(pick.why || []).map((x) => `<span class="draft-need-chip">${x}</span>`).join("")}
+          </div>
+
+          <div class="draft-sim-layout">
+            <section class="draft-pool">
+              <div class="draft-reason-title">🏀 Draft Pool</div>
+              <div class="draft-pool-toolbar">
+                <label for="draft-archetype-filter">类型筛选</label>
+                <select id="draft-archetype-filter">
+                  <option value="all" ${draftState.filter === "all" ? "selected" : ""}>全部类型</option>
+                  ${archetypes.map((a) => `<option value="${a}" ${draftState.filter === a ? "selected" : ""}>${a}</option>`).join("")}
+                </select>
+              </div>
+              <div class="draft-pool-grid">
+                ${visible
+                  .slice(0, 60)
+                  .map(({ p, draftScore }) => {
+                    const fallback = grayPersonAvatarDataUrl();
+                    const avatar = draftAvatarFromUrl(p.avatar_url) || fallback;
+                    const selectedCls = draftState.selectedId === p.id ? "is-selected" : "";
+                    const compared = draftState.compareIds.includes(p.id);
+                    return `<article class="draft-pool-card ${selectedCls}" data-id="${p.id}">
+                      <img src="${avatar}" alt="${p.player_name}" class="draft-pool-card__avatar" loading="lazy" referrerpolicy="no-referrer" onerror="this.src='${fallback.replace(
+                        /'/g,
+                        "%27"
+                      )}'" />
+                      <div class="draft-pool-card__meta">
+                        <div class="draft-pool-card__name">${p.player_name}</div>
+                        <div class="draft-pool-card__sub">#${num(p.draft_rank, 0)} · ${p.pos} · ${p.archetype}</div>
+                        <div class="draft-pool-card__tags">
+                          <span class="role-badge">${p.risk}</span>
+                          <span class="draft-score-chip">Score ${draftScore.toFixed(1)}</span>
+                        </div>
+                      </div>
+                      <button type="button" class="draft-compare-btn ${compared ? "is-on" : ""}" data-action="compare" data-id="${p.id}">
+                        ${compared ? "已对比" : "加入对比"}
+                      </button>
+                    </article>`;
+                  })
+                  .join("")}
+              </div>
+            </section>
+
+            <section class="draft-impact">
+              <div class="draft-reason-title">📊 Draft Impact（Before vs After）</div>
+              ${
+                selected
+                  ? `<div class="draft-impact__pick">当前选择：<strong>${selected.p.player_name}</strong> · ${selected.p.pos} · <span class="role-badge">${selected.p.archetype}</span></div>
+                     <table class="draft-impact-table">
+                       <thead><tr><th>指标</th><th>Before</th><th>After</th><th>变化</th></tr></thead>
+                       <tbody>${renderImpactRows(selectedImpact)}</tbody>
+                     </table>
+                     <div class="draft-reason-title">🧠 Impact Explanation</div>
+                     <ul class="draft-bullets">${selectedExplain.map((x) => `<li>${x}</li>`).join("")}</ul>`
+                  : `<p class="draft-empty">请先从 Draft Pool 选择一名新秀。</p>`
+              }
+
+              <div class="draft-reason-title">🆚 Prospect Compare</div>
+              ${
+                compare.length >= 2
+                  ? (() => {
+                      const a = compare[0];
+                      const b = compare[1];
+                      const ia = computeDraftImpact(team, avgs, a.p);
+                      const ib = computeDraftImpact(team, avgs, b.p);
+                      const row = (label, va, vb, goodHigher = true) => {
+                        const aa = num(va);
+                        const bb = num(vb);
+                        const aCls = goodHigher ? (aa >= bb ? "is-up" : "is-down") : aa <= bb ? "is-up" : "is-down";
+                        const bCls = goodHigher ? (bb >= aa ? "is-up" : "is-down") : bb <= aa ? "is-up" : "is-down";
+                        return `<tr><td>${label}</td><td class="${aCls}">${fmt2(aa)}</td><td class="${bCls}">${fmt2(bb)}</td></tr>`;
+                      };
+                      return `<table class="draft-impact-table">
+                        <thead><tr><th>指标</th><th>${a.p.player_name}</th><th>${b.p.player_name}</th></tr></thead>
+                        <tbody>
+                          ${row("Shooting Impact (pp)", ia.delta.fg3_pp, ib.delta.fg3_pp, true)}
+                          ${row("Defense Impact", -ia.delta.drtg, -ib.delta.drtg, true)}
+                          ${row("Playmaking Impact", ia.delta.ast, ib.delta.ast, true)}
+                          ${row("Rebound Impact", ia.delta.reb, ib.delta.reb, true)}
+                        </tbody>
+                      </table>`;
+                    })()
+                  : `<p class="draft-empty">可在卡池中点“加入对比”，最多选择 2 名进行 A/B 比较。</p>`
+              }
+            </section>
+          </div>
+        </div>
+      `;
+    }
+
   }
 
   window.refreshCurrentSeason = update;
@@ -1274,4 +2001,27 @@ async function main() {
   // 与历史 Tab 一致：进入时不自动选队，不自动渲染内容
 }
 
+function initHeroScroll() {
+  const hero = document.querySelector(".hero-landing");
+  if (!hero) return;
+  let ticking = false;
+  function update() {
+    const h = hero.offsetHeight || 1;
+    const p = Math.min(1, Math.max(0, window.scrollY / (h * 0.52)));
+    document.documentElement.style.setProperty("--hero-progress", String(p));
+    ticking = false;
+  }
+  function onScroll() {
+    if (!ticking) {
+      requestAnimationFrame(update);
+      ticking = true;
+    }
+  }
+  window.addEventListener("scroll", onScroll, { passive: true });
+  window.addEventListener("resize", update, { passive: true });
+  update();
+}
+
+document.addEventListener("DOMContentLoaded", initHeroScroll);
 document.addEventListener("DOMContentLoaded", main);
+

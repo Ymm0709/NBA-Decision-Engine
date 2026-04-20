@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-CN" data-default-tab="historical" data-theme="dark">
+<html lang="zh-CN" data-default-tab="current" data-theme="light">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -7,50 +7,143 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Inter:wght@800;900&display=swap"
       rel="stylesheet"
     />
     <link rel="stylesheet" href="styles.css" />
     <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
   </head>
   <body>
+    <section class="hero-landing" aria-label="介绍">
+      <p class="hero-meta">历史数据 · 当季决策 · 可视化</p>
+      <h1 class="hero-title">
+        <span class="hero-title__line">NBA DECISION</span>
+        <span class="hero-title__line">ENGINE</span>
+      </h1>
+      <p class="hero-sub">Explore history. Optimize team decisions.</p>
+      <span class="hero-scroll-hint">Scroll</span>
+    </section>
+
+    <div class="main-below-fold">
     <div class="shell">
       <header class="site-header">
-        <h1 class="site-title">NBA Decision Engine</h1>
-        <p class="site-desc">Explore history. Optimize team decisions.</p>
-
         <nav class="site-nav" aria-label="主模块切换" role="tablist">
-          <div class="site-nav__inner" id="site-nav-inner" data-active="historical">
+          <div class="site-nav__inner" id="site-nav-inner" data-active="current">
             <span class="site-nav__indicator" id="site-nav-indicator" aria-hidden="true"></span>
             <button
               type="button"
               class="site-nav__btn is-active"
-              id="btn-tab-historical"
-              data-tab="historical"
+              id="btn-tab-current"
+              data-tab="current"
               role="tab"
               aria-selected="true"
-              aria-controls="panel-historical"
+              aria-controls="panel-current"
             >
-              历史数据分析
+              2025-26 当季决策
             </button>
             <button
               type="button"
               class="site-nav__btn"
-              id="btn-tab-current"
-              data-tab="current"
+              id="btn-tab-historical"
+              data-tab="historical"
               role="tab"
               aria-selected="false"
-              aria-controls="panel-current"
+              aria-controls="panel-historical"
             >
-              2025-26 当季决策
+              历史数据分析
             </button>
           </div>
         </nav>
       </header>
 
       <div class="view-port" id="view-port">
-        <div class="view-track" id="view-track" data-active="historical">
-          <!-- ——— 模块 1：历史 ——— -->
+        <div class="view-track" id="view-track" data-active="current">
+          <!-- ——— 模块 1：当前赛季（已交换到左侧） ——— -->
+          <section
+            id="panel-current"
+            class="view-panel"
+            role="tabpanel"
+            aria-labelledby="btn-tab-current"
+            aria-label="2025-26 当季决策"
+          >
+            <p id="error" class="err"></p>
+
+            <div class="panel current-team-picker-panel" id="current-team-picker-panel">
+              <h2>选择球队</h2>
+              <p class="note-inline" id="current-empty-hint">请选择一支球队后展示短板诊断与引援推荐。</p>
+              <div class="current-picker-toolbar">
+                <span class="current-picked-team" id="current-picked-team" aria-live="polite"></span>
+                <button class="current-picker-toggle" id="current-team-picker-toggle" type="button" aria-expanded="true">收起</button>
+              </div>
+              <div
+                id="current-team-picker"
+                class="current-team-picker"
+                role="group"
+                aria-label="选择球队"
+              ></div>
+            </div>
+
+            <div class="current-grid two" id="current-content">
+              <div class="panel">
+                <h2>自动短板诊断（雷达）</h2>
+                <p class="chart-hint">
+                  悬停<strong>蓝色多边形</strong>：各维<strong>原始数据</strong>与联盟对比；悬停<strong>灰色虚线</strong>：联盟基准说明。雷达分 50
+                  = 联盟平均（相对分，非真实 ORtg）。
+                </p>
+                <div id="radar-chart" class="radar-wrap"></div>
+                <h2 class="panel-subtitle">球队阵容</h2>
+                <div id="current-roster" class="current-roster-grid" aria-label="当前球队15人名单"></div>
+              </div>
+              <div class="panel">
+                <h2>本队数据</h2>
+                <p class="chart-hint">以下为与联盟均值的<strong>同量纲柱状对比</strong>及<strong>优劣差值</strong>，与雷达互补。</p>
+                <div class="current-extra-charts">
+                  <div id="chart-current-eff" class="chart-box-sm" aria-label="效率与节奏"></div>
+                  <div id="chart-current-four" class="chart-box-sm" aria-label="三分篮板失误破坏"></div>
+                  <div id="chart-current-delta" class="chart-box-sm" aria-label="相对联盟差值"></div>
+                </div>
+                <div id="weakness-tags" class="tags"></div>
+                <div id="weakness-text"></div>
+              </div>
+            </div>
+
+            <div class="current-workspace-nav" id="current-workspace-nav" role="tablist" aria-label="功能工作区切换">
+              <button
+                type="button"
+                class="current-workspace-nav__btn is-active"
+                data-module="free"
+                role="tab"
+                aria-selected="true"
+                aria-controls="current-recs-panel"
+              >
+                Free Agency
+              </button>
+              <button
+                type="button"
+                class="current-workspace-nav__btn"
+                data-module="draft"
+                role="tab"
+                aria-selected="false"
+                aria-controls="current-draft-panel"
+              >
+                Draft Fit
+              </button>
+            </div>
+
+            <div class="current-workspace" id="current-workspace">
+              <div class="panel current-module-panel is-active" id="current-recs-panel" data-module-panel="free" role="tabpanel">
+                <h2>自由球员 / 角色球员推荐</h2>
+                <ul class="rec-list" id="recs"></ul>
+              </div>
+
+              <div class="panel current-module-panel" id="current-draft-panel" data-module-panel="draft" role="tabpanel" aria-hidden="true">
+                <h2>Draft Fit Simulator</h2>
+                <div id="draft-results" class="draft-results" aria-live="polite"></div>
+              </div>
+            </div>
+          </section>
+
+          <!-- ——— 模块 2：历史（已交换到右侧） ——— -->
           <section
             id="panel-historical"
             class="view-panel"
@@ -70,11 +163,14 @@
             </div>
 
             <div id="historical-insights" class="historical-insights">
-            <div class="panel hist-dim-panel">
+            <div class="panel hist-insights-panel">
               <div class="panel-head">
                 <h2>七维单指标分析</h2>
               </div>
+
               <p id="selected-team-name" class="chart-caption"></p>
+
+              <div class="hist-dim-panel">
               <div class="hist-dim-grid" role="list">
                 <article class="hist-dim-card" role="listitem">
                   <header class="hist-dim-card__head">
@@ -133,78 +229,38 @@
                   <div id="chart-hist-dim-tov" class="hist-dim-chart" aria-label="失误"></div>
                 </article>
               </div>
+              </div>
+
             </div>
 
-            <div class="panel panel-hist-8d">
+            <div class="panel panel-hist-8d is-season-pending">
               <div class="panel-head">
                 <h2>单赛季风格雷达（7 维）</h2>
                 <div class="panel-head-controls">
                   <label class="hist-season-label" for="hist-8d-season">赛季</label>
-                  <select id="hist-8d-season" class="hist-season-select" aria-label="选择赛季"></select>
+                  <div class="hist-season-picker" id="hist-8d-picker">
+                    <button
+                      type="button"
+                      class="hist-season-trigger"
+                      id="hist-8d-trigger"
+                      aria-haspopup="listbox"
+                      aria-expanded="false"
+                    >
+                      选择赛季
+                    </button>
+                    <div class="hist-season-menu" id="hist-8d-menu" role="listbox" aria-label="赛季列表" hidden></div>
+                    <select id="hist-8d-season" class="hist-season-select" aria-label="选择赛季"></select>
+                  </div>
                 </div>
               </div>
               <div id="chart-hist-8d" class="chart-box" style="min-height: 380px"></div>
             </div>
             </div>
           </section>
-
-          <!-- ——— 模块 2：当前赛季 ——— -->
-          <section
-            id="panel-current"
-            class="view-panel"
-            role="tabpanel"
-            aria-labelledby="btn-tab-current"
-            aria-label="2025-26 当季决策"
-          >
-            <p id="error" class="err"></p>
-
-            <div class="panel current-team-picker-panel" id="current-team-picker-panel">
-              <h2>选择球队</h2>
-              <p class="note-inline" id="current-empty-hint">请选择一支球队后展示短板诊断与引援推荐。</p>
-              <div class="current-picker-toolbar">
-                <span class="current-picked-team" id="current-picked-team" aria-live="polite"></span>
-                <button class="current-picker-toggle" id="current-team-picker-toggle" type="button" aria-expanded="true">收起</button>
-              </div>
-              <div
-                id="current-team-picker"
-                class="current-team-picker"
-                role="group"
-                aria-label="选择球队"
-              ></div>
-            </div>
-
-            <div class="current-grid two" id="current-content">
-              <div class="panel">
-                <h2>自动短板诊断（雷达）</h2>
-                <p class="chart-hint">
-                  悬停<strong>蓝色多边形</strong>：各维<strong>原始数据</strong>与联盟对比；悬停<strong>灰色虚线</strong>：联盟基准说明。雷达分 50
-                  = 联盟平均（相对分，非真实 ORtg）。
-                </p>
-                <div id="radar-chart" class="radar-wrap"></div>
-                <h2 class="panel-subtitle">球队阵容</h2>
-                <div id="current-roster" class="current-roster-grid" aria-label="当前球队15人名单"></div>
-              </div>
-              <div class="panel">
-                <h2>本队数据</h2>
-                <p class="chart-hint">以下为与联盟均值的<strong>同量纲柱状对比</strong>及<strong>优劣差值</strong>，与雷达互补。</p>
-                <div class="current-extra-charts">
-                  <div id="chart-current-eff" class="chart-box-sm" aria-label="效率与节奏"></div>
-                  <div id="chart-current-four" class="chart-box-sm" aria-label="三分篮板失误破坏"></div>
-                  <div id="chart-current-delta" class="chart-box-sm" aria-label="相对联盟差值"></div>
-                </div>
-                <div id="weakness-tags" class="tags"></div>
-                <div id="weakness-text"></div>
-              </div>
-            </div>
-
-            <div class="panel" id="current-recs-panel">
-              <h2>自由球员 / 角色球员 · 智能适配排序</h2>
-              <ul class="rec-list" id="recs"></ul>
-            </div>
-          </section>
         </div>
       </div>
 
+    </div>
     </div>
 
     <script>
