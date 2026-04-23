@@ -9,5 +9,5 @@ if [ ! -d "node_modules" ]; then
   npm install
 fi
 
-echo "[run] Starting app on 0.0.0.0:5173 ..."
+echo "[run] Starting app on 0.0.0.0:5888 ..."
 npm run dev -- --host 0.0.0.0
