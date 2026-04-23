@@ -1,0 +1,31 @@
+season,conf,rank,team_abbr,team_name,wins,losses,win_pct,gb
+2025-26,E,1,DET,Detroit Pistons,60,22,.732,—
+2025-26,E,2,BOS,Boston Celtics,56,26,.683,4.0
+2025-26,E,3,NYK,New York Knicks,53,29,.646,7.0
+2025-26,E,4,CLE,Cleveland Cavaliers,52,30,.634,8.0
+2025-26,E,5,TOR,Toronto Raptors,46,36,.561,14.0
+2025-26,E,6,ATL,Atlanta Hawks,46,36,.561,14.0
+2025-26,E,7,PHI,Philadelphia 76ers,45,37,.549,15.0
+2025-26,E,8,ORL,Orlando Magic,45,37,.549,15.0
+2025-26,E,9,CHO,Charlotte Hornets,44,38,.537,16.0
+2025-26,E,10,MIA,Miami Heat,43,39,.524,17.0
+2025-26,E,11,MIL,Milwaukee Bucks,32,50,.390,28.0
+2025-26,E,12,CHI,Chicago Bulls,31,51,.378,29.0
+2025-26,E,13,BRK,Brooklyn Nets,20,62,.244,40.0
+2025-26,E,14,IND,Indiana Pacers,19,63,.232,41.0
+2025-26,E,15,WAS,Washington Wizards,17,65,.207,43.0
+2025-26,W,1,OKC,Oklahoma City Thunder,64,18,.780,—
+2025-26,W,2,SAS,San Antonio Spurs,62,20,.756,2.0
+2025-26,W,3,DEN,Denver Nuggets,54,28,.659,10.0
+2025-26,W,4,LAL,Los Angeles Lakers,53,29,.646,11.0
+2025-26,W,5,HOU,Houston Rockets,52,30,.634,12.0
+2025-26,W,6,MIN,Minnesota Timberwolves,49,33,.598,15.0
+2025-26,W,7,PHO,Phoenix Suns,45,37,.549,19.0
+2025-26,W,8,POR,Portland Trail Blazers,42,40,.512,22.0
+2025-26,W,9,LAC,Los Angeles Clippers,42,40,.512,22.0
+2025-26,W,10,GSW,Golden State Warriors,37,45,.451,27.0
+2025-26,W,11,NOP,New Orleans Pelicans,26,56,.317,38.0
+2025-26,W,12,DAL,Dallas Mavericks,26,56,.317,38.0
+2025-26,W,13,MEM,Memphis Grizzlies,25,57,.305,39.0
+2025-26,W,14,SAC,Sacramento Kings,22,60,.268,42.0
+2025-26,W,15,UTA,Utah Jazz,22,60,.268,42.0

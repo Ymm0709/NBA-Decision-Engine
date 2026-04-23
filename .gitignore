@@ -1,7 +1,5 @@
 node_modules/
 dist/
 .DS_Store
-*.csv
 __pycache__/
 *.pyc
-data/
