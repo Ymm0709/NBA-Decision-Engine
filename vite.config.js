@@ -31,11 +31,13 @@ function repoDataMiddleware() {
 export default defineConfig({
   root: webRoot,
   server: {
+    host: "0.0.0.0",
     port: 5173,
     strictPort: false,
     fs: { allow: [__dirname] },
   },
   preview: {
+    host: "0.0.0.0",
     port: 5173,
     strictPort: false,
   },
