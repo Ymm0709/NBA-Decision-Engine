@@ -43,6 +43,7 @@ BR_BASE = "https://www.basketball-reference.com"
 PLAYER_FIELDS = [
     "player_id",
     "player_name",
+    "avatar_url",
     "team_abbr",
     "pos",
     "age",
@@ -59,6 +60,13 @@ PLAYER_FIELDS = [
     "archetype",
     "season",
 ]
+
+
+def build_avatar_url(player_id: str) -> str:
+    pid = (player_id or "").strip()
+    if not pid:
+        return ""
+    return f"https://www.basketball-reference.com/req/202106291/images/headshots/{pid}.jpg"
 
 
 def br_uncomment_stats_tables(html: str) -> str:
@@ -209,6 +217,7 @@ def parse_player_rows_from_soup(
             {
                 "player_id": player_id,
                 "player_name": pname,
+                "avatar_url": build_avatar_url(player_id),
                 "team_abbr": tabbr,
                 "pos": pos,
                 "age": age,

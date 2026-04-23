@@ -3,7 +3,8 @@
 本赛季全联盟球员数据（Basketball-Reference 联盟 Per Game 表）→ data/current/players.csv
 
 · 默认写入「表中所有球员」；低分钟/低场次记为 pool=roster（网页补强推荐仍只用 free_agent / role）。
-· 交易球员在写入前会去重，只保留当季最后一支真实球队的 stint（与 fetch 脚本一致）。
+· 交易球员在写入前会去重，只保留当季最后一支真实球队的 stint（与 fetch 脚本一致），即当前时间口径阵容。
+· 输出包含场均数据 + 头像 URL（avatar_url）。
 
 用法：
   cd /path/to/NBA && python3 -m pip install -r requirements.txt

@@ -83,31 +83,42 @@
               ></div>
             </div>
 
-            <div class="current-grid two" id="current-content">
+            <div class="current-grid two is-hidden" id="current-content">
               <div class="panel">
                 <h2>自动短板诊断（雷达）</h2>
-                <p class="chart-hint">
-                  悬停<strong>蓝色多边形</strong>：各维<strong>原始数据</strong>与联盟对比；悬停<strong>灰色虚线</strong>：联盟基准说明。雷达分 50
-                  = 联盟平均（相对分，非真实 ORtg）。
-                </p>
                 <div id="radar-chart" class="radar-wrap"></div>
-                <h2 class="panel-subtitle">球队阵容</h2>
-                <div id="current-roster" class="current-roster-grid" aria-label="当前球队15人名单"></div>
+                <div id="current-team-profile-panel">
+                  <div class="panel-head">
+                    <h2>球队基本信息</h2>
+                    <span class="current-team-profile-badge">Team Profile</span>
+                  </div>
+                  <div class="current-team-profile-grid" id="current-team-profile-grid" aria-label="球队基本信息"></div>
+                </div>
               </div>
               <div class="panel">
                 <h2>本队数据</h2>
-                <p class="chart-hint">以下为与联盟均值的<strong>同量纲柱状对比</strong>及<strong>优劣差值</strong>，与雷达互补。</p>
                 <div class="current-extra-charts">
                   <div id="chart-current-eff" class="chart-box-sm" aria-label="效率与节奏"></div>
                   <div id="chart-current-four" class="chart-box-sm" aria-label="三分篮板失误破坏"></div>
                   <div id="chart-current-delta" class="chart-box-sm" aria-label="相对联盟差值"></div>
                 </div>
-                <div id="weakness-tags" class="tags"></div>
-                <div id="weakness-text"></div>
               </div>
             </div>
 
-            <div class="current-workspace-nav" id="current-workspace-nav" role="tablist" aria-label="功能工作区切换">
+            <div class="panel is-hidden" id="current-summary-panel">
+              <h2>球队数据总结</h2>
+              <div id="summary-conclusion" class="summary-conclusion"></div>
+              <div id="weakness-tags" class="summary-tags"></div>
+              <div id="summary-strength-weakness" class="summary-split"></div>
+              <div id="team-style-shift" class="team-style-shift"></div>
+            </div>
+
+            <div class="panel is-hidden" id="current-roster-panel">
+              <h2>球队阵容</h2>
+              <div id="current-roster" class="current-roster-grid" aria-label="当前球队15人名单"></div>
+            </div>
+
+            <div class="current-workspace-nav is-hidden" id="current-workspace-nav" role="tablist" aria-label="功能工作区切换">
               <button
                 type="button"
                 class="current-workspace-nav__btn is-active"
@@ -131,13 +142,15 @@
             </div>
 
             <div class="current-workspace" id="current-workspace">
-              <div class="panel current-module-panel is-active" id="current-recs-panel" data-module-panel="free" role="tabpanel">
+              <div class="panel current-module-panel is-active is-hidden" id="current-recs-panel" data-module-panel="free" role="tabpanel">
                 <h2>自由球员 / 角色球员推荐</h2>
                 <ul class="rec-list" id="recs"></ul>
+                <div class="rec-loadmore-wrap">
+                  <button type="button" class="rec-loadmore-btn" id="recs-load-more">Load more</button>
+                </div>
               </div>
 
-              <div class="panel current-module-panel" id="current-draft-panel" data-module-panel="draft" role="tabpanel" aria-hidden="true">
-                <h2>Draft Fit Simulator</h2>
+              <div class="panel current-module-panel is-hidden" id="current-draft-panel" data-module-panel="draft" role="tabpanel" aria-hidden="true">
                 <div id="draft-results" class="draft-results" aria-live="polite"></div>
               </div>
             </div>
