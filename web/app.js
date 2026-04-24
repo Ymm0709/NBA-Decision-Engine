@@ -1890,20 +1890,22 @@ function buildSeasonSimulationRows(teams, standings, selectedTeamAbbr, fitScore,
       return {
         fitCenter: 74,
         fitScale: 30,
-        rookieBoostMul: 0.72,
-        rookieVolMul: 0.78,
-        teamNoiseMul: 0.82,
-        seasonPathVolMul: 0.78,
+        rookieBoostMul: 0.62,
+        rookieVolMul: 0.62,
+        teamNoiseMul: 0.68,
+        seasonPathVolMul: 0.68,
+        trendProfile: "low",
       };
     }
     if (simStyle === "aggressive") {
       return {
         fitCenter: 67,
         fitScale: 21,
-        rookieBoostMul: 1.32,
-        rookieVolMul: 1.28,
-        teamNoiseMul: 1.18,
-        seasonPathVolMul: 1.24,
+        rookieBoostMul: 1.6,
+        rookieVolMul: 1.52,
+        teamNoiseMul: 1.34,
+        seasonPathVolMul: 1.46,
+        trendProfile: "high",
       };
     }
     return {
@@ -1913,6 +1915,7 @@ function buildSeasonSimulationRows(teams, standings, selectedTeamAbbr, fitScore,
       rookieVolMul: 1.0,
       teamNoiseMul: 1.0,
       seasonPathVolMul: 1.0,
+      trendProfile: "mid",
     };
   })();
   const rookieImpactRaw = clamp((num(fitScore, styleCfg.fitCenter) - styleCfg.fitCenter) / styleCfg.fitScale, -0.8, 1.2);
@@ -1950,10 +1953,38 @@ function buildSeasonSimulationRows(teams, standings, selectedTeamAbbr, fitScore,
 
   const rookieWinBoostByTier = (tier, raw) => {
     const x = clamp(raw, -1, 1.2);
-    if (tier === "elite") return clamp((1.2 + x * 2.1) * styleCfg.rookieBoostMul, -1.0, 4.8);
-    if (tier === "strong") return clamp((1.5 + x * 2.6) * styleCfg.rookieBoostMul, -1.0, 6.4);
-    if (tier === "mid") return clamp((1.8 + x * 3.1) * styleCfg.rookieBoostMul, -1.0, 8.0);
-    return clamp((2.0 + x * 3.6) * styleCfg.rookieBoostMul, -1.5, 9.8);
+    const tierMul = tier === "elite" ? 3 : tier === "strong" ? 5 : tier === "mid" ? 7 : 10;
+    return clamp(x * tierMul * styleCfg.rookieBoostMul, -8.0, 16.0);
+  };
+
+  const teamNoiseStdByTier = (tier) => {
+    if (tier === "elite") return 3;
+    if (tier === "strong") return 4;
+    if (tier === "mid") return 6;
+    return 7;
+  };
+
+  const trendShiftWins = () => {
+    const r = Math.random();
+    if (styleCfg.trendProfile === "low") {
+      // Conservative: very few black swans, mostly stable standings.
+      if (r < 0.07) return 4 + Math.floor(Math.random() * 3); // +4..+6
+      if (r < 0.14) return -(4 + Math.floor(Math.random() * 3)); // -4..-6
+      if (r < 0.16) return Math.random() < 0.5 ? 8 : -8; // rare extreme event
+      return 0;
+    }
+    if (styleCfg.trendProfile === "high") {
+      // Aggressive: frequent surprises and collapses.
+      if (r < 0.23) return 7 + Math.floor(Math.random() * 5); // +7..+11
+      if (r < 0.46) return -(7 + Math.floor(Math.random() * 5)); // -7..-11
+      if (r < 0.62) return Math.random() < 0.5 ? 12 : -12; // many extreme swings
+      return 0;
+    }
+    // Standard: balanced realism + entertainment.
+    if (r < 0.15) return 6 + Math.floor(Math.random() * 5); // +6..+10
+    if (r < 0.3) return -(6 + Math.floor(Math.random() * 5)); // -6..-10
+    if (r < 0.4) return Math.random() < 0.5 ? 12 : -12; // extreme swing
+    return 0;
   };
 
   const rows = (Array.isArray(teams) ? teams : [])
@@ -1961,19 +1992,24 @@ function buildSeasonSimulationRows(teams, standings, selectedTeamAbbr, fitScore,
       const abbr = normalizeTeamAbbr(t.team_abbr);
       const powerRaw = num(powerByTeam.get(abbr), 50);
       const tier = tierByPower(powerRaw);
-      const baseWinPct = clamp(0.24 + powerRaw * 0.0052, 0.22, 0.72);
-      const baseWins = clamp(Math.round(baseWinPct * 82), 18, 59);
+      let baseWinPct = clamp(0.18 + Math.pow(clamp(powerRaw / 100, 0, 1), 2.2) * 0.62, 0.18, 0.8);
       const rookieWinsBase = abbr === selectedNorm ? rookieWinBoostByTier(tier, rookieImpactRaw) : 0;
+      if (abbr === selectedNorm && rookieImpactRaw > 0.5) {
+        const boostPct = 0.03 + Math.random() * 0.03;
+        baseWinPct = clamp(baseWinPct + boostPct, 0.18, 0.86);
+      }
+      const baseWins = Math.round(baseWinPct * 82);
       // 随机化新秀兑现：同一思路下每次模拟结果不同（有超预期也有低于预期）
       const rookieVol = (tier === "weak" ? 2.0 : tier === "mid" ? 1.7 : tier === "strong" ? 1.4 : 1.2) * styleCfg.rookieVolMul;
       const rookieWins = abbr === selectedNorm
         ? clamp(rookieWinsBase + randomNormal() * rookieVol, -2.0, 10.0)
         : 0;
-      const randomNoiseWins = clamp(randomNormal() * 1.7 * styleCfg.teamNoiseMul, -4.2, 4.2);
-      const projectedWins = clamp(Math.round(baseWins + rookieWins + randomNoiseWins), 15, 64);
+      const randomNoiseWins = randomNormal() * teamNoiseStdByTier(tier) * styleCfg.teamNoiseMul;
+      const trendShift = trendShiftWins();
+      const projectedWins = clamp(Math.round(baseWins + rookieWins + randomNoiseWins + trendShift), 18, 65);
       const simulatedWinPct = projectedWins / 82;
       const adjustedPower = clamp(
-        Math.round(powerRaw + (abbr === selectedNorm ? rookieWins * 1.5 : 0) + randomNoiseWins * 0.7),
+        Math.round(powerRaw + (abbr === selectedNorm ? rookieWins * 1.5 : 0) + randomNoiseWins * 0.7 + trendShift * 0.5),
         1,
         100
       );
@@ -1985,6 +2021,7 @@ function buildSeasonSimulationRows(teams, standings, selectedTeamAbbr, fitScore,
         projectedWins,
         rookieImpact: rookieWins,
         randomNoise: randomNoiseWins,
+        trendShift,
         simulatedWinPct,
         tier,
         pathWins: [],
@@ -2002,6 +2039,12 @@ function buildSeasonSimulationRows(teams, standings, selectedTeamAbbr, fitScore,
 function renderSeasonSimBoard(container, state) {
   const sim = state.simulation;
   if (!container || !sim) return;
+  const styleMetaText =
+    sim.style === "conservative"
+      ? "保守模式：更接近现实，强队更稳定，黑马较少"
+      : sim.style === "aggressive"
+        ? "激进模式：游戏化波动，黑马与崩盘更常见，新秀更易改局"
+        : "标准模式：平衡现实与娱乐，默认推荐";
   const progress = clamp(num(sim.progress), 0, 1);
   const pathStep = (() => {
     const first = sim.rows && sim.rows[0];
@@ -2040,7 +2083,7 @@ function renderSeasonSimBoard(container, state) {
       <header class="season-sim-head">
         <p class="season-sim-head__kicker">Next Season Simulator</p>
         <h2 class="season-sim-head__title">2026-27 全联盟战绩模拟</h2>
-        <p class="season-sim-head__meta">已选球队：<strong>${sim.selectedTeamName}</strong> · 结果基于战力、新秀影响和随机波动生成</p>
+        <p class="season-sim-head__meta">已选球队：<strong>${sim.selectedTeamName}</strong> · ${styleMetaText}</p>
         <div class="season-sim-style-switch" role="group" aria-label="模拟风格">
           <button type="button" class="season-style-btn ${sim.style === "conservative" ? "is-active" : ""}" data-sim-style="conservative">保守</button>
           <button type="button" class="season-style-btn ${sim.style === "standard" ? "is-active" : ""}" data-sim-style="standard">标准</button>
